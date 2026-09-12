@@ -25,4 +25,9 @@ __pycache__/
 Thumbs.db
 
 ~$*
-backend/karmayogi.db
+backend/karmayogi.db*[Kk]arm[a]?yogi_[Pp]ragya_v*
+
+
+Karmyogi_Pragya_v2/
+backend/*.db
+*.db
