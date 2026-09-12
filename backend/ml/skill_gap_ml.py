@@ -7,7 +7,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 from typing import Dict, List, Any
 from pydantic import BaseModel
-from data_loader import load_competency_framework
+try:
+    from ml.data_loader import load_competency_framework
+except ModuleNotFoundError:
+    from data_loader import load_competency_framework
 
 # --- 1. Basic Configuration ---
 app = FastAPI(
