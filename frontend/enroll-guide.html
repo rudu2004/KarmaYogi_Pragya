@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        (function() {
+            var rawUser = sessionStorage.getItem('pragya_user');
+            if (!rawUser) { window.location.replace('login.html'); return; }
+            try {
+                var user = JSON.parse(rawUser);
+                if (user.role === 'supervisor') { window.location.replace('admin.html'); return; }
+            } catch(e) { window.location.replace('login.html'); }
+        })();
+    </script>
+    <title>Karmayogi Pragya - iGOT Enrollment Guide</title>
+    <link rel="icon" type="image/png" href="./logo.png">
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome 6 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="./css/style.css" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-header d-flex align-items-center gap-2 py-3 px-3">
+                <img src="./logo.png" alt="Karmayogi Pragya Logo" style="height: 38px; width: auto; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));">
+                <h4 class="mb-0 text-white fw-bold fs-5 tracking-wide">Karmayogi Pragya</h4>
+            </div>
+            <div class="sidebar-nav">
+                <a href="dashboard.html" class="sidebar-link" data-i18n="nav_dashboard"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
+                <a href="assessment.html" class="sidebar-link" data-i18n="nav_assessment"><i class="fa-solid fa-clipboard-list"></i> Diagnostic Quiz</a>
+                <a href="skill-gap.html" class="sidebar-link" data-i18n="nav_skillgap"><i class="fa-solid fa-chart-bar"></i> Skill Gap Analysis</a>
+                <a href="study.html" class="sidebar-link" data-i18n="nav_study"><i class="fa-solid fa-book-open"></i> Study Module</a>
+                <a href="knowledge-hub.html" class="sidebar-link" data-i18n="nav_hub"><i class="fa-solid fa-file-pdf"></i> Knowledge Hub</a>
+                <a href="profile.html" class="sidebar-link" data-i18n="nav_profile"><i class="fa-solid fa-user"></i> Officer Profile</a>
+                <a href="admin.html" class="sidebar-link" data-i18n="nav_admin"><i class="fa-solid fa-shield-halved"></i> Admin Hub</a>
+            </div>
+            <div class="mt-auto p-3">
+                <a href="#" class="sidebar-link text-danger" onclick="signOut()">
+                    <i class="fa-solid fa-sign-out-alt"></i> <span data-i18n="logout">Logout</span>
+                </a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="topbar">
+                <button id="langToggleBtn" class="btn btn-outline-secondary btn-sm" onclick="toggleLanguage()">
+                    <i class="fa-solid fa-language me-1"></i> <span id="langText">हिन्दी / English</span>
+                </button>
+            </div>
+            
+            <div class="d-flex justify-content-between align-items-center mb-4 animate-fade-in">
+                <h2><i class="fa-solid fa-link me-2 text-primary"></i> <span data-i18n="igot_enrollment">iGOT Karmayogi Enrollment</span></h2>
+            </div>
+            
+            <div class="row animate-slide-up">
+                <div class="col-md-10 mx-auto mb-4">
+                    <div class="card card-karmayogi h-100">
+                        <div class="card-body py-5 px-md-5">
+                            <h4 class="fw-bold text-center mb-5" data-i18n="enroll_steps_title">Follow these 3 easy steps to enroll on iGOT</h4>
+                            
+                            <div class="row text-center mb-5">
+                                <div class="col-md-4 mb-4">
+                                    <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px; font-size: 1.5rem;">1</div>
+                                    <h5 class="fw-bold">Login to Parichay</h5>
+                                    <p class="text-muted small">Use your government email ID (@gov.in or @nic.in) to login to the Parichay portal.</p>
+                                </div>
+                                <div class="col-md-4 mb-4">
+                                    <div class="bg-warning text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px; font-size: 1.5rem;">2</div>
+                                    <h5 class="fw-bold">Navigate to iGOT</h5>
+                                    <p class="text-muted small">Select the iGOT Karmayogi application from your Parichay dashboard.</p>
+                                </div>
+                                <div class="col-md-4 mb-4">
+                                    <div class="bg-success text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px; font-size: 1.5rem;">3</div>
+                                    <h5 class="fw-bold">Enroll in Course</h5>
+                                    <p class="text-muted small">Search for the recommended course and click 'Enroll' to begin your learning journey.</p>
+                                </div>
+                            </div>
+                            
+                            <div class="text-center mt-4">
+                                <a href="https://igotkarmayogi.gov.in" target="_blank" class="btn btn-primary btn-lg px-5">
+                                    Go to iGOT Karmayogi Portal <i class="fa-solid fa-arrow-up-right-from-square ms-2"></i>
+                                </a>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="./js/auth.js"></script>
+    <script src="./js/ui_logic.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const user = getUserSession();
+            if (typeof applyLanguage === 'function') applyLanguage(user.language);
+        });
+    </script>
+</body>
+</html>

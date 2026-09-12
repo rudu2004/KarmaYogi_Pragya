@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        // ─── Auth Guard: sessionStorage-based ─────────────────────────────
+        (function() {
+            var rawUser = sessionStorage.getItem('pragya_user');
+            if (!rawUser) { window.location.replace('login.html'); return; }
+            try {
+                var user = JSON.parse(rawUser);
+                if (user.role === 'supervisor') { window.location.replace('admin.html'); return; }
+                if (sessionStorage.getItem('assessment_completed') !== 'true' && localStorage.getItem('assessment_completed') !== 'true' && localStorage.getItem('diagnostic_completed') !== 'true') {
+                    window.location.replace('index.html'); return;
+                }
+            } catch(e) { window.location.replace('login.html'); }
+        })();
+    </script>
+    <title>Karmayogi Pragya - Dashboard</title>
+    <link rel="icon" type="image/png" href="./logo.png">
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome 6 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- SweetAlert2 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="./css/style.css" rel="stylesheet">
+    <!-- html2pdf.js for Certificate Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <!-- Scripts (Deferred) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script defer src="./js/auth.js"></script>
+    <script defer src="./js/api.js"></script>
+    <script defer src="./js/charts.js"></script>
+    <script defer src="./js/apple_scroll.js"></script>
+    <script defer src="./js/ui_logic.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-header d-flex align-items-center gap-2 py-3 px-3">
+                <img src="./logo.png" alt="Karmayogi Pragya Logo" style="height: 38px; width: auto; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));">
+                <h4 class="mb-0 text-white fw-bold fs-5 tracking-wide">Karmayogi Pragya</h4>
+            </div>
+            <div class="sidebar-nav">
+                <a href="dashboard.html" class="sidebar-link active" data-i18n="nav_dashboard"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
+                <a href="assessment.html" class="sidebar-link" data-i18n="nav_assessment"><i class="fa-solid fa-clipboard-list"></i> Diagnostic Quiz</a>
+                <a href="skill-gap.html" class="sidebar-link" data-i18n="nav_skillgap"><i class="fa-solid fa-chart-bar"></i> Skill Gap Analysis</a>
+                <a href="study.html" class="sidebar-link" data-i18n="nav_study"><i class="fa-solid fa-book-open"></i> Study Module</a>
+                <a href="knowledge-hub.html" class="sidebar-link" data-i18n="nav_hub"><i class="fa-solid fa-file-pdf"></i> Knowledge Hub</a>
+                <a href="profile.html" class="sidebar-link" data-i18n="nav_profile"><i class="fa-solid fa-user"></i> Officer Profile</a>
+                <a href="admin.html" class="sidebar-link" data-i18n="nav_admin"><i class="fa-solid fa-shield-halved"></i> Admin Hub</a>
+            </div>
+            <div class="mt-auto p-3">
+                <a href="#" class="sidebar-link text-danger" onclick="signOut()">
+                    <i class="fa-solid fa-sign-out-alt"></i> <span data-i18n="logout">Logout</span>
+                </a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="topbar d-flex justify-content-between align-items-center">
+                <button id="langToggleBtn" class="btn btn-outline-secondary btn-sm" onclick="toggleLanguage()">
+                    <i class="fa-solid fa-language me-1"></i> <span id="langText">हिन्दी / English</span>
+                </button>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted small" id="topbarDesig"></span>
+                    <a href="#" class="btn btn-outline-danger btn-sm" onclick="signOut()">
+                        <i class="fa-solid fa-right-from-bracket me-1"></i>Sign Out
+                    </a>
+                </div>
+            </div>
+            
+            <div class="d-flex justify-content-between align-items-center mb-4 animate-fade-in">
+                <h2><span data-i18n="welcome">Welcome</span>, <span id="userNameDisplay">Learner</span></h2>
+                <button class="btn btn-outline-primary shadow-sm" onclick="window.downloadAuditCertificate()">
+                    <i class="fa-solid fa-file-pdf me-2"></i>Download Competency Certificate
+                </button>
+            </div>
+            
+            <div class="row animate-slide-up">
+                <!-- Competency Profile / Skill Readiness Summary -->
+                <div class="col-md-6 mb-4">
+                    <div class="card card-karmayogi h-100 shadow-sm border-0 p-4">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <h5 class="fw-bold mb-0 text-dark">
+                                    <i class="fa-solid fa-shield-heart text-primary me-2"></i>Skill Readiness Summary
+                                </h5>
+                                <p class="text-muted small mb-0">Clear breakdown of your competencies evaluated in <strong id="topicDisplay">AI in Public Policy</strong></p>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-light text-dark border px-3 py-2 fs-6">
+                                    Target: <strong class="text-success">80% Mastery</strong>
+                                </span>
+                            </div>
+                        </div>
+                        <hr class="my-3">
+                        <!-- Human-friendly progress list -->
+                        <div id="competencyListContainer" class="d-flex flex-column gap-3 mt-2 overflow-auto" style="max-height: 480px; padding-right: 6px;">
+                            <!-- Rendered dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- iGOT Courses Pathway -->
+                <div class="col-md-6 mb-4">
+                    <div class="card card-karmayogi h-100">
+                        <h5 class="card-title" data-i18n="recommended_courses">Targeted iGOT Karmayogi Courses</h5>
+                        <p class="text-muted small">Your personalized 3-step mastery pathway</p>
+                        <div id="pathwayCards" class="d-flex flex-column gap-3 mt-3">
+                            <!-- Courses rendered dynamically by renderCoursePathway() -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Hidden Certificate Template Container -->
+        <div id="certificateContainer" style="position: absolute; top: 0; left: 0; width: 800px; opacity: 0; pointer-events: none; z-index: -999; background: #ffffff; padding: 35px; color: #0A192F;">
+            <div style="border: 15px solid #F59E0B; padding: 20px; text-align: center; position: relative;">
+                <div style="border: 2px solid #0A192F; padding: 30px;">
+                    <div style="display: flex; justify-content: center; align-items: center; gap: 24px; margin-bottom: 20px;">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/5/55/Emblem_of_India.svg" alt="National Emblem" style="height: 70px; opacity: 0.9;">
+                        <div style="height: 50px; width: 1px; background: #cbd5e1;"></div>
+                        <img src="./logo.png" alt="Karmayogi Pragya Logo" style="height: 70px; object-fit: contain;">
+                    </div>
+                    <h2 style="color: #0A192F; margin-bottom: 5px; font-weight: bold; text-transform: uppercase; font-size: 1.5rem;">Ministry of Statistics and Programme Implementation</h2>
+                    <h1 style="color: #0A192F; margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">Mission Karmayogi</h1>
+                    <h3 style="color: #F59E0B; margin-top: 0; margin-bottom: 30px; letter-spacing: 2px;">OFFICER COMPETENCY AUDIT CERTIFICATE</h3>
+                    
+                    <p style="font-size: 1.2rem; margin-bottom: 10px;">This is to certify that</p>
+                    <h2 id="certOfficerName" style="font-size: 2.5rem; color: #2563EB; font-style: italic; border-bottom: 2px dashed #ccc; display: inline-block; padding-bottom: 5px; margin-bottom: 20px;">Officer Name</h2>
+                    
+                    <p style="font-size: 1.1rem; max-width: 600px; margin: 0 auto 30px;">has completed the Diagnostic Assessment and Competency Audit for the domain of</p>
+                    <h3 id="certTopic" style="font-size: 1.8rem; background: #f0f0f0; display: inline-block; padding: 10px 20px; border-radius: 5px; margin-bottom: 30px;">Topic</h3>
+                    
+                    <div style="display: flex; justify-content: center; gap: 40px; margin-bottom: 30px;">
+                        <div style="text-align: center;">
+                            <p style="margin: 0; font-size: 0.9rem; color: #666; text-transform: uppercase;">Diagnostic Score</p>
+                            <h2 id="certScore" style="margin: 0; color: #10B981; font-size: 2.5rem;">0%</h2>
+                        </div>
+                        <div style="text-align: center;">
+                            <p style="margin: 0; font-size: 0.9rem; color: #666; text-transform: uppercase;">Assessed Level</p>
+                            <h2 id="certLevel" style="margin: 0; color: #F59E0B; font-size: 2.5rem;">Beginner</h2>
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: left; background: #F8FAFC; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
+                        <h4 style="color: #0A192F; border-bottom: 1px solid #ccc; padding-bottom: 10px;">Targeted Competency Gaps</h4>
+                        <ul id="certGapsList" style="margin-bottom: 0; padding-left: 20px;">
+                        </ul>
+                    </div>
+
+                    <div style="text-align: left; background: #EFF6FF; padding: 20px; border-radius: 8px; margin-bottom: 40px;">
+                        <h4 style="color: #2563EB; border-bottom: 1px solid #ccc; padding-bottom: 10px;">Prescribed 3-Step iGOT Pathway</h4>
+                        <ol id="certPathwayList" style="margin-bottom: 0; padding-left: 20px;">
+                        </ol>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 50px;">
+                        <div style="text-align: left;">
+                            <p style="margin: 0;">Date: <strong id="certDate"></strong></p>
+                            <p style="margin: 0; font-size: 0.8rem; color: #999;">Audit ID: <span id="certId"></span></p>
+                        </div>
+                        <div style="text-align: center;">
+                            <i class="fa-solid fa-qrcode fa-3x" style="color: #0A192F;"></i>
+                            <p style="margin: 0; font-size: 0.7rem; color: #666; margin-top: 5px;">Scan to Verify</p>
+                        </div>
+                        <div style="text-align: right; border-top: 1px solid #333; padding-top: 10px; width: 200px;">
+                            <p style="margin: 0; font-weight: bold;">Authorized Signatory</p>
+                            <p style="margin: 0; font-size: 0.8rem;">MoSPI Pragya System</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Sign out function
+        function signOut() {
+            sessionStorage.clear();
+            localStorage.clear();
+            window.location.replace('login.html');
+        }
+        function clearSession() { signOut(); }
+        function signOutPragya() { signOut(); }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Read from sessionStorage auth system first, fallback to legacy
+            let user = null;
+            try { user = JSON.parse(sessionStorage.getItem('pragya_user')); } catch {}
+            if (!user) {
+                try { user = getUserSession(); } catch {}
+            }
+
+            if (user && user.full_name) {
+                document.getElementById('userNameDisplay').textContent = user.full_name;
+                const desigEl = document.getElementById('topbarDesig');
+                if (desigEl) desigEl.textContent = user.designation || '';
+            } else if (user && user.name) {
+                document.getElementById('userNameDisplay').textContent = user.name;
+            }
+
+            if (user && user.topic) {
+                document.getElementById('topicDisplay').textContent = user.topic;
+            } else if (user && user.department) {
+                document.getElementById('topicDisplay').textContent = user.department;
+            }
+
+            if (typeof applyLanguage === 'function') applyLanguage((user && user.language) || 'en');
+            if (typeof window.renderCoursePathway === 'function') window.renderCoursePathway();
+        });
+    </script>
+</body>
+</html>

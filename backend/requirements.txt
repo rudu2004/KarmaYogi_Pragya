@@ -1,0 +1,21 @@
+# Core web framework
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
+python-dotenv
+
+# PDF parsing
+pymupdf
+
+# Google Generative AI (Gemini)
+langchain
+langchain-google-genai
+google-generativeai
+
+# ML / NLP — CPU-only builds for Render free-tier memory limits
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+sentence-transformers
+scikit-learn
+numpy

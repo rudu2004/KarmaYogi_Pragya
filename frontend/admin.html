@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        // ─── Auth Guard: sessionStorage-based, Supervisor-only ────────────
+        (function() {
+            var rawUser = sessionStorage.getItem('pragya_user');
+            if (!rawUser) { window.location.replace('login.html'); return; }
+            try {
+                var user = JSON.parse(rawUser);
+                if (user.role !== 'supervisor' && user.role !== 'admin') {
+                    alert('Access Denied: Supervisor clearance required.');
+                    window.location.replace('dashboard.html');
+                }
+            } catch(e) { window.location.replace('login.html'); }
+        })();
+    </script>
+    <title>Karmayogi Pragya — Supervisor Telemetry Dashboard</title>
+    <meta name="description" content="Real-time supervisor telemetry dashboard for monitoring MoSPI officer competency, deficit alerts, and targeted interventions.">
+    <link rel="icon" type="image/png" href="./logo.png">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome 6 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        navy: { 50: '#f0f3f9', 100: '#d9e0f0', 200: '#b3c1e1', 400: '#6682c4', 600: '#2c4a8a', 800: '#1a2d54', 900: '#0f1b33' },
+                        deficit: '#dc2626',
+                        adequate: '#f59e0b',
+                        proficient: '#059669',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        * { font-family: 'Inter', system-ui, sans-serif; }
+        body { background: #FFFFFF; }
+
+        /* Sidebar */
+        .sidebar {
+            width: 260px; min-height: 100vh;
+            background: linear-gradient(180deg, #0f1b33 0%, #1a2d54 100%);
+            display: flex; flex-direction: column;
+            position: fixed; top: 0; left: 0; z-index: 50;
+        }
+        .sidebar-link {
+            display: flex; align-items: center; gap: 12px;
+            padding: 11px 20px; color: #b3c1e1;
+            font-size: 14px; font-weight: 500;
+            text-decoration: none; border-radius: 8px;
+            margin: 2px 10px; transition: all 0.2s;
+        }
+        .sidebar-link:hover { background: rgba(255,255,255,0.08); color: #fff; }
+        .sidebar-link.active {
+            background: rgba(255,255,255,0.12); color: #fff;
+            border-left: 3px solid #60a5fa;
+        }
+
+        .main-area { margin-left: 260px; min-height: 100vh; }
+
+        /* KPI Cards */
+        .kpi-card {
+            background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+            padding: 24px; position: relative; overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.08); }
+        .kpi-card .kpi-icon {
+            width: 44px; height: 44px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+        }
+
+        /* Heatmap bar */
+        .heatmap-bar-track {
+            background: #f1f5f9; border-radius: 6px; height: 28px;
+            overflow: hidden; position: relative;
+        }
+        .heatmap-bar-fill {
+            height: 100%; border-radius: 6px;
+            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex; align-items: center; padding-left: 10px;
+            font-size: 12px; font-weight: 600; color: #fff;
+            min-width: 32px;
+        }
+
+        /* Table */
+        .ledger-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+        .ledger-table thead th {
+            background: #f8fafc; border-bottom: 2px solid #e2e8f0;
+            padding: 12px 16px; font-size: 12px; font-weight: 600;
+            color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;
+            text-align: left;
+        }
+        .ledger-table tbody td {
+            padding: 14px 16px; border-bottom: 1px solid #f1f5f9;
+            font-size: 14px; color: #334155;
+        }
+        .ledger-table tbody tr:hover { background: #f8fafc; }
+
+        .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 100px; font-size: 12px; font-weight: 600; }
+        .badge-deficit { background: #fef2f2; color: #dc2626; }
+        .badge-adequate { background: #fffbeb; color: #d97706; }
+        .badge-proficient { background: #ecfdf5; color: #059669; }
+
+        /* Status dot */
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .status-dot.live { background: #22c55e; animation: pulse-dot 2s infinite; }
+        .status-dot.offline { background: #ef4444; }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* Skeleton loading */
+        .skeleton { background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 6px; }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-in { animation: fadeInUp 0.5s ease-out forwards; }
+    </style>
+</head>
+<body class="antialiased text-slate-800">
+
+    <!-- ═══ SIDEBAR ═══ -->
+    <nav class="sidebar">
+        <div class="flex items-center gap-3 px-5 py-5 border-b border-white/10">
+            <img src="./logo.png" alt="Karmayogi Pragya" class="h-9 w-auto drop-shadow-md" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">
+            <div>
+                <h1 class="text-white font-bold text-[15px] leading-tight">Karmayogi Pragya</h1>
+                <span class="text-blue-300 text-[11px] font-medium">Supervisor Console</span>
+            </div>
+        </div>
+
+        <div class="flex-1 py-3 space-y-0.5">
+            <a href="dashboard.html" class="sidebar-link"><i class="fa-solid fa-chart-pie w-5 text-center"></i> Dashboard</a>
+            <a href="assessment.html" class="sidebar-link"><i class="fa-solid fa-clipboard-list w-5 text-center"></i> Diagnostic Quiz</a>
+            <a href="skill-gap.html" class="sidebar-link"><i class="fa-solid fa-chart-bar w-5 text-center"></i> Skill Gap Analysis</a>
+            <a href="study.html" class="sidebar-link"><i class="fa-solid fa-book-open w-5 text-center"></i> Study Module</a>
+            <a href="knowledge-hub.html" class="sidebar-link"><i class="fa-solid fa-file-pdf w-5 text-center"></i> Knowledge Hub</a>
+            <a href="profile.html" class="sidebar-link"><i class="fa-solid fa-user w-5 text-center"></i> Officer Profile</a>
+            <a href="admin.html" class="sidebar-link active"><i class="fa-solid fa-shield-halved w-5 text-center"></i> Supervisor Hub</a>
+        </div>
+
+        <div class="px-4 pb-4">
+            <a href="#" class="sidebar-link text-red-400 hover:text-red-300" onclick="signOut()">
+                <i class="fa-solid fa-sign-out-alt w-5 text-center"></i> Logout
+            </a>
+        </div>
+    </nav>
+
+    <!-- ═══ MAIN CONTENT ═══ -->
+    <div class="main-area">
+        <!-- Top Bar -->
+        <header class="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <i class="fa-solid fa-satellite-dish text-navy-600 text-lg"></i>
+                <h2 class="text-lg font-bold text-navy-900">Supervisor Telemetry Dashboard</h2>
+                <span id="connectionStatus" class="flex items-center gap-1.5 ml-3 text-xs font-medium text-slate-500">
+                    <span class="status-dot offline" id="statusDot"></span>
+                    <span id="statusText">Connecting…</span>
+                </span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span id="lastUpdated" class="text-xs text-slate-400"></span>
+                <button onclick="refreshDashboard()" class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-navy-600 bg-navy-50 hover:bg-navy-100 rounded-lg transition-colors" id="refreshBtn">
+                    <i class="fa-solid fa-arrows-rotate text-xs"></i> Refresh
+                </button>
+                <div class="h-5 w-px bg-slate-200"></div>
+                <div class="flex items-center gap-2" id="userInfoBar">
+                    <div class="w-8 h-8 rounded-full bg-navy-100 flex items-center justify-center">
+                        <i class="fa-solid fa-user-shield text-navy-600 text-xs"></i>
+                    </div>
+                    <div class="leading-tight">
+                        <div class="text-sm font-semibold text-navy-900" id="topbarUserName">Supervisor</div>
+                        <div class="text-[11px] text-slate-400" id="topbarUserDesig">—</div>
+                    </div>
+                </div>
+                <button onclick="signOut()" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors" title="Sign Out">
+                    <i class="fa-solid fa-right-from-bracket"></i> Sign Out
+                </button>
+            </div>
+        </header>
+
+        <!-- Dashboard Body -->
+        <main class="px-8 py-6 max-w-[1400px] mx-auto" id="dashboardBody">
+
+            <!-- KPI CARDS ROW -->
+            <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8" id="kpiSection">
+                <!-- Populated by JS -->
+            </section>
+
+            <!-- COMPETENCY HEATMAP + DEPARTMENT BREAKDOWN -->
+            <section class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                <!-- Competency Heatmap (2/3 width) -->
+                <div class="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-6 animate-in" style="animation-delay: 0.2s;">
+                    <div class="flex items-center justify-between mb-5">
+                        <div>
+                            <h3 class="font-bold text-navy-900 text-base flex items-center gap-2">
+                                <i class="fa-solid fa-fire text-orange-500"></i> MoSPI Competency Heatmap
+                            </h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Average score per domain across all assessed officers</p>
+                        </div>
+                        <span class="text-xs text-slate-400 bg-slate-50 px-2 py-1 rounded">Threshold: 40%</span>
+                    </div>
+                    <div class="space-y-3" id="heatmapContainer">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Department Breakdown (1/3 width) -->
+                <div class="bg-white border border-slate-200 rounded-xl p-6 animate-in" style="animation-delay: 0.3s;">
+                    <h3 class="font-bold text-navy-900 text-base flex items-center gap-2 mb-5">
+                        <i class="fa-solid fa-building-columns text-navy-400"></i> Department Breakdown
+                    </h3>
+                    <div class="space-y-4" id="deptContainer">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- OFFICER ROSTER -->
+            <section class="bg-white border border-slate-200 rounded-xl p-6 mb-8 animate-in" style="animation-delay: 0.4s;">
+                <div class="flex items-center justify-between mb-5">
+                    <h3 class="font-bold text-navy-900 text-base flex items-center gap-2">
+                        <i class="fa-solid fa-users text-navy-400"></i> Officer Competency Roster
+                    </h3>
+                    <span class="text-xs text-slate-400" id="rosterCount"></span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="ledger-table" id="officerTable">
+                        <thead>
+                            <tr>
+                                <th>Officer</th>
+                                <th>Cadre</th>
+                                <th>Department</th>
+                                <th>Designation</th>
+                                <th>State</th>
+                                <th>Avg Score</th>
+                                <th>Assessments</th>
+                                <th>Deficits</th>
+                            </tr>
+                        </thead>
+                        <tbody id="officerTableBody">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- INTERVENTION LEDGER -->
+            <section class="bg-white border border-slate-200 rounded-xl p-6 mb-8 animate-in" style="animation-delay: 0.5s;">
+                <div class="flex items-center justify-between mb-5">
+                    <h3 class="font-bold text-navy-900 text-base flex items-center gap-2">
+                        <i class="fa-solid fa-triangle-exclamation text-deficit"></i> Intervention Ledger
+                    </h3>
+                    <span class="text-xs font-medium px-2 py-1 rounded bg-red-50 text-deficit" id="interventionCount"></span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="ledger-table" id="interventionTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Officer</th>
+                                <th>Department</th>
+                                <th>Cadre</th>
+                                <th>Competency Domain</th>
+                                <th>Score</th>
+                                <th>Assessed On</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="interventionTableBody">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- ═══ AUTH & UI SCRIPTS ═══ -->
+    <script src="./js/auth.js"></script>
+    <script>
+    // ─── EMBEDDED FALLBACK DATA ──────────────────────────────────────────
+    // Identical structure to /api/telemetry/summary response.
+    // Dashboard renders this instantly if backend is not yet started.
+    const FALLBACK_DATA = {
+        "generated_at": new Date().toISOString(),
+        "kpi": {
+            "total_enrolled": 5,
+            "total_assessments": 18,
+            "avg_competency_score": 57.3,
+            "deficit_alerts": 7,
+            "proficient_count": 6
+        },
+        "competency_heatmap": [
+            {"competency_domain": "Sampling Theory", "avg_score": 31.5, "n_assessed": 2, "n_deficit": 1},
+            {"competency_domain": "Price Index Compilation", "avg_score": 33.0, "n_assessed": 2, "n_deficit": 2},
+            {"competency_domain": "Data Governance & Ethics", "avg_score": 28.5, "n_assessed": 2, "n_deficit": 2},
+            {"competency_domain": "Statistical Computing (R/Python)", "avg_score": 67.0, "n_assessed": 3, "n_deficit": 1},
+            {"competency_domain": "Macro-Economic Indicators", "avg_score": 59.0, "n_assessed": 2, "n_deficit": 1},
+            {"competency_domain": "Data Visualization", "avg_score": 61.0, "n_assessed": 2, "n_deficit": 0},
+            {"competency_domain": "Survey Methodology", "avg_score": 84.0, "n_assessed": 3, "n_deficit": 0},
+            {"competency_domain": "National Accounts & GDP", "avg_score": 89.5, "n_assessed": 2, "n_deficit": 0}
+        ],
+        "officers": [
+            {"id":1, "name":"Ananya Sharma", "cadre":"IAS", "department":"MoSPI", "designation":"Deputy Director", "posting_state":"Delhi", "avg_score":71.5, "assessments_taken":4, "deficit_areas":1},
+            {"id":2, "name":"Vikram Patel", "cadre":"ISS", "department":"CSO", "designation":"Statistical Officer", "posting_state":"Maharashtra", "avg_score":43.0, "assessments_taken":4, "deficit_areas":2},
+            {"id":3, "name":"Priya Nair", "cadre":"IES", "department":"NSSO", "designation":"Assistant Director", "posting_state":"Kerala", "avg_score":91.7, "assessments_taken":3, "deficit_areas":0},
+            {"id":4, "name":"Rajesh Kumar Singh", "cadre":"ISS", "department":"DES", "designation":"Senior Statistician", "posting_state":"Uttar Pradesh", "avg_score":33.5, "assessments_taken":4, "deficit_areas":3},
+            {"id":5, "name":"Meera Joshi", "cadre":"IAS", "department":"NITI Aayog", "designation":"Joint Secretary", "posting_state":"Delhi", "avg_score":63.7, "assessments_taken":3, "deficit_areas":1}
+        ],
+        "interventions": [
+            {"id":1, "name":"Rajesh Kumar Singh", "department":"DES", "cadre":"ISS", "competency_domain":"Sampling Theory", "score_pct":19.0, "assessed_on":"2026-07-29", "status":"DEFICIT"},
+            {"id":2, "name":"Rajesh Kumar Singh", "department":"DES", "cadre":"ISS", "competency_domain":"Data Governance & Ethics", "score_pct":22.0, "assessed_on":"2026-07-01", "status":"DEFICIT"},
+            {"id":3, "name":"Vikram Patel", "department":"CSO", "cadre":"ISS", "competency_domain":"Price Index Compilation", "score_pct":28.0, "assessed_on":"2026-07-03", "status":"DEFICIT"},
+            {"id":4, "name":"Meera Joshi", "department":"NITI Aayog", "cadre":"IAS", "competency_domain":"Statistical Computing (R/Python)", "score_pct":31.0, "assessed_on":"2026-07-25", "status":"DEFICIT"},
+            {"id":5, "name":"Vikram Patel", "department":"CSO", "cadre":"ISS", "competency_domain":"Macro-Economic Indicators", "score_pct":33.0, "assessed_on":"2026-08-01", "status":"DEFICIT"},
+            {"id":6, "name":"Ananya Sharma", "department":"MoSPI", "cadre":"IAS", "competency_domain":"Data Governance & Ethics", "score_pct":35.0, "assessed_on":"2026-07-27", "status":"DEFICIT"},
+            {"id":7, "name":"Rajesh Kumar Singh", "department":"DES", "cadre":"ISS", "competency_domain":"Price Index Compilation", "score_pct":38.0, "assessed_on":"2026-07-14", "status":"DEFICIT"}
+        ],
+        "departments": [
+            {"department":"DES", "officer_count":1, "dept_avg_score":33.5},
+            {"department":"CSO", "officer_count":1, "dept_avg_score":43.0},
+            {"department":"NITI Aayog", "officer_count":1, "dept_avg_score":63.7},
+            {"department":"MoSPI", "officer_count":1, "dept_avg_score":71.5},
+            {"department":"NSSO", "officer_count":1, "dept_avg_score":91.7}
+        ]
+    };
+
+    const BACKEND_URL = window.location.origin;
+    let isLive = false;
+
+    // ─── INIT ─────────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+        showSkeletons();
+        fetchAndRender();
+    });
+
+    async function fetchAndRender() {
+        let data = null;
+        try {
+            const res = await fetch(`${BACKEND_URL}/api/telemetry/summary`, { signal: AbortSignal.timeout(5000) });
+            if (res.ok) {
+                data = await res.json();
+                isLive = true;
+            }
+        } catch (e) {
+            console.warn('Backend unreachable, using embedded fallback:', e.message);
+            isLive = false;
+        }
+
+        if (!data) data = FALLBACK_DATA;
+        renderDashboard(data);
+    }
+
+    function refreshDashboard() {
+        const btn = document.getElementById('refreshBtn');
+        btn.querySelector('i').classList.add('animate-spin');
+        showSkeletons();
+        setTimeout(() => {
+            fetchAndRender().finally(() => {
+                btn.querySelector('i').classList.remove('animate-spin');
+            });
+        }, 300);
+    }
+
+    // ─── SKELETONS ────────────────────────────────────────────────────────
+    function showSkeletons() {
+        const kpiSec = document.getElementById('kpiSection');
+        kpiSec.innerHTML = Array(5).fill('').map(() => `
+            <div class="kpi-card"><div class="skeleton h-5 w-24 mb-3"></div><div class="skeleton h-8 w-16 mb-2"></div><div class="skeleton h-4 w-32"></div></div>
+        `).join('');
+    }
+
+    // ─── RENDER DASHBOARD ─────────────────────────────────────────────────
+    function renderDashboard(data) {
+        updateStatus();
+        renderKPIs(data.kpi);
+        renderHeatmap(data.competency_heatmap);
+        renderDepartments(data.departments);
+        renderOfficers(data.officers);
+        renderInterventions(data.interventions);
+
+        const ts = data.generated_at ? new Date(data.generated_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'N/A';
+        document.getElementById('lastUpdated').textContent = `Last sync: ${ts}`;
+    }
+
+    function updateStatus() {
+        const dot = document.getElementById('statusDot');
+        const txt = document.getElementById('statusText');
+        if (isLive) {
+            dot.className = 'status-dot live';
+            txt.textContent = 'Live';
+            txt.className = 'text-green-600';
+        } else {
+            dot.className = 'status-dot offline';
+            txt.textContent = 'Offline (cached)';
+            txt.className = 'text-orange-500';
+        }
+    }
+
+    // ─── KPI CARDS ────────────────────────────────────────────────────────
+    function renderKPIs(kpi) {
+        const configs = [
+            { label: 'Enrolled Officers', value: kpi.total_enrolled, icon: 'fa-user-tie', bg: 'bg-blue-50', iconColor: 'text-blue-600' },
+            { label: 'Assessments Logged', value: kpi.total_assessments, icon: 'fa-clipboard-check', bg: 'bg-indigo-50', iconColor: 'text-indigo-600' },
+            { label: 'Avg Competency', value: kpi.avg_competency_score + '%', icon: 'fa-gauge-high', bg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
+            { label: 'Deficit Alerts', value: kpi.deficit_alerts, icon: 'fa-triangle-exclamation', bg: 'bg-red-50', iconColor: 'text-red-600' },
+            { label: 'Proficient', value: kpi.proficient_count, icon: 'fa-circle-check', bg: 'bg-green-50', iconColor: 'text-green-600' },
+        ];
+
+        document.getElementById('kpiSection').innerHTML = configs.map((c, i) => `
+            <div class="kpi-card animate-in" style="animation-delay: ${i * 0.08}s;">
+                <div class="flex items-start justify-between mb-3">
+                    <div class="kpi-icon ${c.bg}">
+                        <i class="fa-solid ${c.icon} ${c.iconColor}"></i>
+                    </div>
+                </div>
+                <div class="text-2xl font-extrabold text-navy-900 tracking-tight">${c.value}</div>
+                <div class="text-xs font-medium text-slate-400 mt-1">${c.label}</div>
+            </div>
+        `).join('');
+    }
+
+    // ─── COMPETENCY HEATMAP ───────────────────────────────────────────────
+    function renderHeatmap(heatmap) {
+        const container = document.getElementById('heatmapContainer');
+        container.innerHTML = heatmap.map(h => {
+            const pct = Math.min(Math.max(h.avg_score, 0), 100);
+            let barColor, statusLabel;
+            if (pct < 40) { barColor = 'bg-red-500'; statusLabel = 'DEFICIT'; }
+            else if (pct < 80) { barColor = 'bg-amber-500'; statusLabel = 'ADEQUATE'; }
+            else { barColor = 'bg-emerald-500'; statusLabel = 'PROFICIENT'; }
+
+            return `
+                <div class="flex items-center gap-4">
+                    <div class="w-52 shrink-0 text-sm font-medium text-slate-600 truncate" title="${h.competency_domain}">${h.competency_domain}</div>
+                    <div class="flex-1">
+                        <div class="heatmap-bar-track">
+                            <div class="heatmap-bar-fill ${barColor}" style="width: ${pct}%;">${pct}%</div>
+                        </div>
+                    </div>
+                    <div class="w-20 text-right">
+                        <span class="badge ${pct < 40 ? 'badge-deficit' : pct < 80 ? 'badge-adequate' : 'badge-proficient'}">${statusLabel}</span>
+                    </div>
+                    <div class="w-16 text-xs text-slate-400 text-right">${h.n_assessed} assessed</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // ─── DEPARTMENT BREAKDOWN ─────────────────────────────────────────────
+    function renderDepartments(depts) {
+        const container = document.getElementById('deptContainer');
+        container.innerHTML = depts.map(d => {
+            const pct = Math.min(Math.max(d.dept_avg_score || 0, 0), 100);
+            let ringColor;
+            if (pct < 40) ringColor = '#dc2626';
+            else if (pct < 80) ringColor = '#f59e0b';
+            else ringColor = '#059669';
+
+            return `
+                <div class="flex items-center gap-4 p-3 rounded-lg hover:bg-slate-50 transition-colors">
+                    <div class="relative w-12 h-12 shrink-0">
+                        <svg viewBox="0 0 36 36" class="w-12 h-12 -rotate-90">
+                            <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                  fill="none" stroke="#e2e8f0" stroke-width="3"/>
+                            <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                  fill="none" stroke="${ringColor}" stroke-width="3"
+                                  stroke-dasharray="${pct}, 100" stroke-linecap="round"/>
+                        </svg>
+                        <span class="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-slate-700">${pct}%</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-semibold text-navy-900 truncate">${d.department}</div>
+                        <div class="text-xs text-slate-400">${d.officer_count} officer${d.officer_count > 1 ? 's' : ''}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // ─── OFFICER ROSTER ───────────────────────────────────────────────────
+    function renderOfficers(officers) {
+        document.getElementById('rosterCount').textContent = `${officers.length} officers enrolled`;
+        const tbody = document.getElementById('officerTableBody');
+        tbody.innerHTML = officers.map(o => {
+            const scoreBadge = o.avg_score < 40 ? 'badge-deficit' : o.avg_score < 80 ? 'badge-adequate' : 'badge-proficient';
+            return `
+                <tr>
+                    <td class="font-semibold text-navy-900">${o.name}</td>
+                    <td><span class="badge bg-slate-100 text-slate-600">${o.cadre}</span></td>
+                    <td>${o.department}</td>
+                    <td class="text-slate-500">${o.designation}</td>
+                    <td class="text-slate-500">${o.posting_state}</td>
+                    <td><span class="badge ${scoreBadge}">${o.avg_score}%</span></td>
+                    <td class="text-center">${o.assessments_taken}</td>
+                    <td class="text-center">
+                        ${o.deficit_areas > 0 ? `<span class="badge badge-deficit"><i class="fa-solid fa-circle-exclamation text-[10px]"></i> ${o.deficit_areas}</span>` : '<span class="text-green-500 text-xs font-medium">—</span>'}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    // ─── INTERVENTION LEDGER ──────────────────────────────────────────────
+    function renderInterventions(interventions) {
+        document.getElementById('interventionCount').textContent = `${interventions.length} active deficit${interventions.length !== 1 ? 's' : ''}`;
+        const tbody = document.getElementById('interventionTableBody');
+        tbody.innerHTML = interventions.map((v, i) => {
+            const dateStr = v.assessed_on ? new Date(v.assessed_on).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+            return `
+                <tr>
+                    <td class="text-slate-400 text-xs font-mono">${i + 1}</td>
+                    <td class="font-semibold text-navy-900">${v.name}</td>
+                    <td>${v.department}</td>
+                    <td><span class="badge bg-slate-100 text-slate-600">${v.cadre}</span></td>
+                    <td class="font-medium">${v.competency_domain}</td>
+                    <td><span class="badge badge-deficit font-bold">${v.score_pct}%</span></td>
+                    <td class="text-slate-500 text-sm">${dateStr}</td>
+                    <td><span class="badge badge-deficit"><i class="fa-solid fa-circle-xmark text-[10px]"></i> DEFICIT</span></td>
+                    <td>
+                        <button class="text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
+                                onclick="alert('Intervention queued for ${v.name} in ${v.competency_domain}')">
+                            <i class="fa-solid fa-paper-plane text-[10px] mr-1"></i>Assign Course
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    // ─── SESSION HELPERS ──────────────────────────────────────────────
+    function getUserSession() {
+        try { return JSON.parse(sessionStorage.getItem('pragya_user') || localStorage.getItem('user_session') || '{}'); }
+        catch { return {}; }
+    }
+    function signOut() {
+        sessionStorage.clear();
+        localStorage.clear();
+        window.location.replace('login.html');
+    }
+    function clearSession() { signOut(); }
+
+    // ─── SESSION GUARD & USER DISPLAY ─────────────────────────────────
+    (function initSessionUI() {
+        const user = getUserSession();
+        if (!user || !user.full_name) {
+            // No session — allow access but show defaults
+        }
+        if (user.full_name) {
+            const nameEl = document.getElementById('topbarUserName');
+            const desigEl = document.getElementById('topbarUserDesig');
+            if (nameEl) nameEl.textContent = user.full_name;
+            if (desigEl) desigEl.textContent = user.designation || user.department || '—';
+        }
+    })();
+    </script>
+</body>
+</html>

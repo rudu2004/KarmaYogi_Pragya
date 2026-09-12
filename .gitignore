@@ -1,0 +1,28 @@
+# Local virtual environment (Gigabytes in size)
+.venv/
+venv/
+ENV/
+
+# Local backups & agents
+KarmaYogi_Pragya_v1/
+karmayogi_Pragya_v2/
+.agents/
+
+# Presentation decks and raw media
+*.pptx
+*.ppt
+flow v1.png
+flow v2.png
+picture_46.png
+updated_picture_46.png
+
+# Python caches & system files
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.DS_Store
+Thumbs.db
+
+~$*
+backend/karmayogi.db

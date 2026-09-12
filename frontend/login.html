@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Karmayogi Pragya — Sign In</title>
+    <meta name="description" content="Authentication portal for Karmayogi Pragya — National Civil Services Statistical Competency Platform. Sign in as Officer or Supervisor.">
+    <link rel="icon" type="image/png" href="./logo.png">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome 6 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        navy: { 50: '#f0f3f9', 100: '#d9e0f0', 200: '#b3c1e1', 400: '#6682c4', 600: '#2c4a8a', 800: '#1a2d54', 900: '#0f1b33' },
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        * { font-family: 'Inter', system-ui, sans-serif; }
+        body {
+            background: linear-gradient(135deg, #f0f3f9 0%, #e8ecf4 50%, #dfe5ef 100%);
+            min-height: 100vh;
+        }
+
+        .login-card {
+            background: #FFFFFF;
+            border: 1px solid #e2e8f0;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(15, 27, 51, 0.08), 0 4px 12px rgba(15, 27, 51, 0.04);
+            max-width: 480px;
+            width: 100%;
+        }
+
+        /* Role toggle */
+        .role-toggle {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 6px; padding: 4px;
+            background: #f1f5f9; border-radius: 12px;
+        }
+        .role-btn {
+            padding: 10px 12px; border: none; border-radius: 10px;
+            font-size: 13px; font-weight: 600; cursor: pointer;
+            background: transparent; color: #64748b;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .role-btn.active {
+            background: #fff; color: #0f1b33;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .role-btn:hover:not(.active) { color: #334155; }
+
+        /* Form toggle */
+        .form-toggle {
+            display: flex; gap: 0; border-bottom: 2px solid #f1f5f9;
+        }
+        .form-toggle-btn {
+            flex: 1; padding: 10px; border: none; background: none;
+            font-size: 13px; font-weight: 600; color: #94a3b8; cursor: pointer;
+            border-bottom: 2px solid transparent; margin-bottom: -2px;
+            transition: all 0.2s;
+        }
+        .form-toggle-btn.active {
+            color: #2c4a8a; border-bottom-color: #2c4a8a;
+        }
+
+        /* Input styling */
+        .form-input {
+            width: 100%; padding: 11px 14px; border: 1.5px solid #e2e8f0;
+            border-radius: 10px; font-size: 14px; color: #0f1b33;
+            background: #fff; transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+        }
+        .form-input:focus {
+            border-color: #6682c4; box-shadow: 0 0 0 3px rgba(102, 130, 196, 0.15);
+        }
+        .form-input::placeholder { color: #94a3b8; }
+
+        .form-label {
+            display: block; font-size: 12px; font-weight: 600;
+            color: #475569; margin-bottom: 5px; letter-spacing: 0.02em;
+        }
+
+        .form-select {
+            width: 100%; padding: 11px 14px; border: 1.5px solid #e2e8f0;
+            border-radius: 10px; font-size: 14px; color: #0f1b33;
+            background: #fff; outline: none; cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .form-select:focus { border-color: #6682c4; box-shadow: 0 0 0 3px rgba(102, 130, 196, 0.15); }
+
+        .submit-btn {
+            width: 100%; padding: 12px; border: none; border-radius: 10px;
+            font-size: 14px; font-weight: 700; cursor: pointer;
+            background: linear-gradient(135deg, #1a2d54 0%, #2c4a8a 100%);
+            color: #fff; transition: transform 0.15s, box-shadow 0.2s;
+        }
+        .submit-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(28, 45, 84, 0.25); }
+        .submit-btn:active { transform: translateY(0); }
+        .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+        /* Demo badges */
+        .demo-badge {
+            display: flex; align-items: center; gap: 6px;
+            padding: 8px 14px; border-radius: 8px; font-size: 12px;
+            font-weight: 600; cursor: pointer; border: 1.5px solid #e2e8f0;
+            background: #fafbfc; color: #475569; transition: all 0.2s;
+        }
+        .demo-badge:hover { border-color: #6682c4; background: #f0f3f9; color: #2c4a8a; }
+
+        /* Notification toast */
+        .toast {
+            position: fixed; top: 24px; right: 24px; z-index: 100;
+            padding: 14px 20px; border-radius: 12px; font-size: 13px; font-weight: 600;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12); max-width: 360px;
+            transform: translateX(120%); transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .toast.show { transform: translateX(0); }
+        .toast-success { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+        .toast-error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-in { animation: fadeInUp 0.6s ease-out forwards; }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { animation: spin 0.7s linear infinite; }
+    </style>
+</head>
+<body class="antialiased flex items-center justify-center px-4 py-8">
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Main Login Card -->
+    <div class="login-card p-8 animate-in">
+
+        <!-- Brand Header -->
+        <div class="text-center mb-7">
+            <div class="flex items-center justify-center gap-3 mb-3">
+                <img src="./logo.png" alt="Karmayogi Pragya" class="h-12 w-auto" onerror="this.style.display='none'">
+            </div>
+            <h1 class="text-xl font-extrabold text-navy-900 tracking-tight">Karmayogi Pragya</h1>
+            <p class="text-xs text-slate-400 mt-1 font-medium">National Civil Services Statistical Competency Portal</p>
+        </div>
+
+        <!-- Role Toggle -->
+        <div class="role-toggle mb-5" id="roleToggle">
+            <button class="role-btn active" data-role="officer" onclick="setRole('officer')">
+                <i class="fa-solid fa-user-graduate text-sm"></i> Official / Trainee Officer
+            </button>
+            <button class="role-btn" data-role="supervisor" onclick="setRole('supervisor')">
+                <i class="fa-solid fa-user-shield text-sm"></i> Cadre Supervisor
+            </button>
+        </div>
+
+        <!-- Form Toggle (Sign In / Register) -->
+        <div class="form-toggle mb-5" id="formToggle">
+            <button class="form-toggle-btn active" data-mode="login" onclick="setMode('login')">
+                <i class="fa-solid fa-right-to-bracket mr-1"></i> Sign In
+            </button>
+            <button class="form-toggle-btn" data-mode="register" onclick="setMode('register')">
+                <i class="fa-solid fa-user-plus mr-1"></i> New Registration
+            </button>
+        </div>
+
+        <!-- Sign In Form -->
+        <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-4">
+            <div>
+                <label class="form-label">Username</label>
+                <input type="text" id="loginUsername" class="form-input" placeholder="Enter your username" required autocomplete="username">
+            </div>
+            <div>
+                <label class="form-label">Password</label>
+                <div class="relative">
+                    <input type="password" id="loginPassword" class="form-input pr-10" placeholder="Enter your password" required autocomplete="current-password">
+                    <button type="button" onclick="togglePwVis('loginPassword', this)" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-sm">
+                        <i class="fa-solid fa-eye"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <input type="checkbox" id="rememberMe" class="rounded border-slate-300 text-navy-600">
+                <label for="rememberMe" class="text-xs text-slate-500 font-medium cursor-pointer">Remember me</label>
+            </div>
+            <button type="submit" class="submit-btn" id="loginBtn">
+                <i class="fa-solid fa-right-to-bracket mr-2"></i>Sign In
+            </button>
+        </form>
+
+        <!-- Register Form (hidden by default) -->
+        <form id="registerForm" onsubmit="handleRegister(event)" class="space-y-3.5" style="display:none;">
+            <div>
+                <label class="form-label">Full Name</label>
+                <input type="text" id="regFullName" class="form-input" placeholder="e.g. Priya Sharma" required>
+            </div>
+            <div>
+                <label class="form-label">Department / Field</label>
+                <input type="text" id="regDepartment" class="form-input" placeholder="e.g. National Accounts, Price Statistics" value="MoSPI">
+            </div>
+            <div>
+                <label class="form-label">Designation</label>
+                <input type="text" id="regDesignation" class="form-input" placeholder="e.g. Statistical Officer">
+            </div>
+            <div>
+                <label class="form-label">Username</label>
+                <input type="text" id="regUsername" class="form-input" placeholder="Choose a unique username" required>
+            </div>
+            <div>
+                <label class="form-label">Password</label>
+                <div class="relative">
+                    <input type="password" id="regPassword" class="form-input pr-10" placeholder="Min 6 characters" required minlength="6">
+                    <button type="button" onclick="togglePwVis('regPassword', this)" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-sm">
+                        <i class="fa-solid fa-eye"></i>
+                    </button>
+                </div>
+            </div>
+            <button type="submit" class="submit-btn" id="registerBtn">
+                <i class="fa-solid fa-user-plus mr-2"></i>Create Account
+            </button>
+        </form>
+
+        <!-- Separator -->
+        <div class="flex items-center gap-3 my-5">
+            <div class="flex-1 h-px bg-slate-200"></div>
+            <span class="text-[11px] text-slate-400 font-medium uppercase tracking-wider">Quick Demo Access</span>
+            <div class="flex-1 h-px bg-slate-200"></div>
+        </div>
+
+        <!-- Demo Badges -->
+        <div class="grid grid-cols-2 gap-3">
+            <button class="demo-badge" onclick="demoLogin('officer')">
+                <i class="fa-solid fa-bolt text-amber-500"></i> Quick Demo: Officer
+            </button>
+            <button class="demo-badge" onclick="demoLogin('supervisor')">
+                <i class="fa-solid fa-bolt text-indigo-500"></i> Quick Demo: Supervisor
+            </button>
+        </div>
+
+        <!-- Footer -->
+        <p class="text-center text-[11px] text-slate-400 mt-6">
+            <i class="fa-solid fa-shield-halved mr-1"></i> Secured by Karmayogi Pragya Platform &middot; MoSPI &middot; Government of India
+        </p>
+    </div>
+
+    <script>
+    // ─── STATE ─────────────────────────────────────────────────────────────
+    const BACKEND_URL = window.location.origin;
+    let currentRole = 'officer';
+    let currentMode = 'login';
+    let isNewRegistration = false;
+
+    // ─── DEMO CREDENTIALS ─────────────────────────────────────────────────
+    const DEMO_CREDS = {
+        officer: { username: 'officer1', password: 'password123' },
+        supervisor: { username: 'supervisor1', password: 'admin123' }
+    };
+
+    // ─── FALLBACK USER DATA (when backend is unreachable) ─────────────────
+    const FALLBACK_USERS = {
+        officer1: {
+            id: 1, username: 'officer1', full_name: 'Rajesh Kumar Singh',
+            role: 'officer', cadre: 'SSS', department: 'Price & Cost of Living',
+            designation: 'Senior Statistical Officer'
+        },
+        supervisor1: {
+            id: 2, username: 'supervisor1', full_name: 'Dr. Sunita Rao',
+            role: 'supervisor', cadre: 'ISS', department: 'National Accounts Division',
+            designation: 'Cadre Director / Section Head'
+        }
+    };
+
+    // ─── ROLE TOGGLE ──────────────────────────────────────────────────────
+    function setRole(role) {
+        currentRole = role;
+        document.querySelectorAll('#roleToggle .role-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.role === role);
+        });
+    }
+
+    // ─── FORM MODE TOGGLE ─────────────────────────────────────────────────
+    function setMode(mode) {
+        currentMode = mode;
+        document.querySelectorAll('#formToggle .form-toggle-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === mode);
+        });
+        document.getElementById('loginForm').style.display = mode === 'login' ? 'block' : 'none';
+        document.getElementById('registerForm').style.display = mode === 'register' ? 'block' : 'none';
+    }
+
+    // ─── PASSWORD VISIBILITY ──────────────────────────────────────────────
+    function togglePwVis(inputId, btn) {
+        const input = document.getElementById(inputId);
+        const isPassword = input.type === 'password';
+        input.type = isPassword ? 'text' : 'password';
+        btn.querySelector('i').className = isPassword ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+    }
+
+    // ─── TOAST ────────────────────────────────────────────────────────────
+    function showToast(message, type = 'success') {
+        const toast = document.getElementById('toast');
+        toast.className = `toast toast-${type} show`;
+        toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation'} mr-2"></i>${message}`;
+        setTimeout(() => toast.classList.remove('show'), 3500);
+    }
+
+    // ─── LOGIN HANDLER ────────────────────────────────────────────────────
+    async function handleLogin(e) {
+        e.preventDefault();
+        const username = document.getElementById('loginUsername').value.trim();
+        const password = document.getElementById('loginPassword').value;
+        const btn = document.getElementById('loginBtn');
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch spinner mr-2"></i>Authenticating…';
+
+        try {
+            const res = await fetch(`${BACKEND_URL}/api/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password }),
+                signal: AbortSignal.timeout(5000)
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                onLoginSuccess(data.user, data.token);
+                return;
+            } else if (res.status === 401) {
+                showToast('Invalid username or password', 'error');
+            } else {
+                throw new Error(`Server error ${res.status}`);
+            }
+        } catch (err) {
+            console.warn('Backend unreachable, trying fallback:', err.message);
+            // Client-side fallback for demo evaluation
+            if (FALLBACK_USERS[username]) {
+                const fallbackUser = FALLBACK_USERS[username];
+                // Simple client-side password check for demo
+                const demoPass = DEMO_CREDS[fallbackUser.role]?.password;
+                if (password === demoPass) {
+                    onLoginSuccess(fallbackUser, 'fallback_session');
+                    return;
+                }
+            }
+            showToast('Connection failed. Use demo badges below.', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-right-to-bracket mr-2"></i>Sign In';
+        }
+    }
+
+    // ─── REGISTER HANDLER ─────────────────────────────────────────────────
+    async function handleRegister(e) {
+        e.preventDefault();
+        const payload = {
+            username: document.getElementById('regUsername').value.trim(),
+            password: document.getElementById('regPassword').value,
+            full_name: document.getElementById('regFullName').value.trim(),
+            role: currentRole,
+            department: document.getElementById('regDepartment').value.trim() || 'MoSPI',
+            designation: document.getElementById('regDesignation').value.trim() || 'Statistical Officer'
+        };
+
+        const btn = document.getElementById('registerBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch spinner mr-2"></i>Creating account…';
+
+        try {
+            const res = await fetch(`${BACKEND_URL}/api/auth/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                signal: AbortSignal.timeout(5000)
+            });
+
+            const data = await res.json();
+
+            if (res.ok && data.success) {
+                isNewRegistration = true;
+                // Clear stale assessment data for fresh onboarding
+                sessionStorage.removeItem('assessment_completed');
+                sessionStorage.removeItem('diagnostic_completed');
+                localStorage.removeItem('assessment_completed');
+                localStorage.removeItem('diagnostic_completed');
+                localStorage.removeItem('kp_competency');
+                localStorage.removeItem('karmayogi_assessment');
+                localStorage.removeItem('diagnostic_score');
+                localStorage.removeItem('active_course_pathway');
+                showToast(`Account created! Signing in as ${data.user.full_name}…`);
+                // Auto-login after registration
+                setTimeout(() => {
+                    document.getElementById('loginUsername').value = payload.username;
+                    document.getElementById('loginPassword').value = payload.password;
+                    setMode('login');
+                    handleLogin(new Event('submit'));
+                }, 1200);
+            } else if (res.status === 409) {
+                showToast('Username already taken. Choose another.', 'error');
+            } else {
+                showToast(data.detail || 'Registration failed', 'error');
+            }
+        } catch (err) {
+            console.warn('Backend unreachable for registration:', err.message);
+            showToast('Backend offline. Use demo badges to continue.', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-user-plus mr-2"></i>Create Account';
+        }
+    }
+
+    // ─── SUCCESS HANDLER ──────────────────────────────────────────────────
+    function onLoginSuccess(user, token) {
+        // Store session in sessionStorage (dies on browser/tab close)
+        sessionStorage.setItem('pragya_user', JSON.stringify(user));
+        sessionStorage.setItem('pragya_token', token);
+
+        // Clear any stale persistent keys from previous runs
+        localStorage.removeItem('pragya_user');
+        localStorage.removeItem('pragya_token');
+
+        // Also maintain legacy session key for backward compat
+        localStorage.setItem('user_session', JSON.stringify({
+            name: user.full_name,
+            language: 'en',
+            topic: user.department
+        }));
+
+        showToast(`Welcome, ${user.full_name}!`);
+
+        // Redirect based on role and intake flow
+        setTimeout(() => {
+            if (user.role === 'supervisor') {
+                window.location.href = 'admin.html';
+            } else {
+                const hasAssessment = sessionStorage.getItem('assessment_completed') === 'true' || localStorage.getItem('diagnostic_completed') === 'true';
+                if (isNewRegistration || !hasAssessment) {
+                    window.location.href = 'index.html';
+                } else {
+                    window.location.href = 'dashboard.html';
+                }
+            }
+        }, 800);
+    }
+
+    // ─── DEMO LOGIN ───────────────────────────────────────────────────────
+    function demoLogin(role) {
+        const creds = DEMO_CREDS[role];
+        setRole(role);
+        setMode('login');
+        document.getElementById('loginUsername').value = creds.username;
+        document.getElementById('loginPassword').value = creds.password;
+
+        // Animate the fill
+        const inputs = document.querySelectorAll('#loginForm .form-input');
+        inputs.forEach(inp => {
+            inp.style.borderColor = '#6682c4';
+            setTimeout(() => inp.style.borderColor = '', 600);
+        });
+
+        // Auto-submit after brief delay
+        setTimeout(() => handleLogin(new Event('submit')), 400);
+    }
+
+    // ─── ON LOAD: Always stay on login page ──────────────────────────────
+    // No auto-redirect. User must actively sign in every time.
+    // Clean up any stale persistent auth keys to prevent confusion.
+    document.addEventListener('DOMContentLoaded', () => {
+        localStorage.removeItem('pragya_user');
+        localStorage.removeItem('pragya_token');
+    });
+    </script>
+</body>
+</html>

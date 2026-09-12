@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        (function() {
+            var rawUser = sessionStorage.getItem('pragya_user');
+            if (!rawUser) { window.location.replace('login.html'); return; }
+            try {
+                var user = JSON.parse(rawUser);
+                if (user.role === 'supervisor') { window.location.replace('admin.html'); return; }
+            } catch(e) { window.location.replace('login.html'); }
+        })();
+    </script>
+    <title>Karmayogi Pragya - Study Module</title>
+    <link rel="icon" type="image/png" href="./logo.png">
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome 6 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- SweetAlert2 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="./css/style.css" rel="stylesheet">
+
+    <!-- Scripts (Deferred) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script defer src="./js/auth.js"></script>
+    <script defer src="./js/api.js"></script>
+    <script defer src="./js/apple_scroll.js"></script>
+    <script defer src="./js/ui_logic.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-header d-flex align-items-center gap-2 py-3 px-3">
+                <img src="./logo.png" alt="Karmayogi Pragya Logo" style="height: 38px; width: auto; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));">
+                <h4 class="mb-0 text-white fw-bold fs-5 tracking-wide">Karmayogi Pragya</h4>
+            </div>
+            <div class="sidebar-nav">
+                <a href="dashboard.html" class="sidebar-link" data-i18n="nav_dashboard"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
+                <a href="assessment.html" class="sidebar-link" data-i18n="nav_assessment"><i class="fa-solid fa-clipboard-list"></i> Diagnostic Quiz</a>
+                <a href="skill-gap.html" class="sidebar-link" data-i18n="nav_skillgap"><i class="fa-solid fa-chart-bar"></i> Skill Gap Analysis</a>
+                <a href="study.html" class="sidebar-link active" data-i18n="nav_study"><i class="fa-solid fa-book-open"></i> Study Module</a>
+                <a href="knowledge-hub.html" class="sidebar-link" data-i18n="nav_hub"><i class="fa-solid fa-file-pdf"></i> Knowledge Hub</a>
+                <a href="profile.html" class="sidebar-link" data-i18n="nav_profile"><i class="fa-solid fa-user"></i> Officer Profile</a>
+                <a href="admin.html" class="sidebar-link" data-i18n="nav_admin"><i class="fa-solid fa-shield-halved"></i> Admin Hub</a>
+            </div>
+            <div class="mt-auto p-3">
+                <a href="#" class="sidebar-link text-danger" onclick="signOut()">
+                    <i class="fa-solid fa-sign-out-alt"></i> <span data-i18n="logout">Logout</span>
+                </a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="topbar">
+                <button id="langToggleBtn" class="btn btn-outline-secondary btn-sm" onclick="toggleLanguage()">
+                    <i class="fa-solid fa-language me-1"></i> <span id="langText">हिन्दी / English</span>
+                </button>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mb-4 animate-fade-in">
+                <h2><i class="fa-solid fa-book-open me-2 text-primary"></i> <span id="courseTitleDisplay">Loading Course...</span></h2>
+                <div>
+                    <button class="btn btn-outline-secondary me-2" onclick="window.location.href='dashboard.html'">
+                        <i class="fa-solid fa-arrow-left me-1"></i> Back to Dashboard
+                    </button>
+                </div>
+            </div>
+            
+            <div class="row animate-slide-up">
+                <!-- Study Notes Section -->
+                <div class="col-lg-8 mb-4">
+                    <div class="card card-karmayogi h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-4">
+                                <h4 class="card-title fw-bold mb-0"><i class="fa-solid fa-file-lines me-2 text-primary"></i> Study Notes</h4>
+                                <div class="audio-toolbar bg-light p-2 rounded border d-flex align-items-center gap-2 shadow-sm">
+                                    <span class="small fw-semibold text-muted me-1"><i class="fa-solid fa-headphones text-primary me-1"></i> Voice Tutor</span>
+                                    <div class="soundwave-visualizer me-1" id="voiceSoundWave">
+                                        <div class="soundwave-bar"></div>
+                                        <div class="soundwave-bar"></div>
+                                        <div class="soundwave-bar"></div>
+                                        <div class="soundwave-bar"></div>
+                                        <div class="soundwave-bar"></div>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-success rounded-circle" id="btnPlayVoice" onclick="window.playVoiceTutor()" title="Play">
+                                        <i class="fa-solid fa-play"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-warning rounded-circle" id="btnPauseVoice" onclick="window.pauseVoiceTutor()" title="Pause">
+                                        <i class="fa-solid fa-pause"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger rounded-circle" id="btnStopVoice" onclick="window.stopVoiceTutor()" title="Stop">
+                                        <i class="fa-solid fa-stop"></i>
+                                    </button>
+                                    <select class="form-select form-select-sm ms-2" id="voiceSpeedSelect" style="width: 80px;" onchange="window.changeVoiceSpeed(this.value)">
+                                        <option value="0.8">0.8x</option>
+                                        <option value="1.0" selected>1.0x</option>
+                                        <option value="1.2">1.2x</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="studyNotesContainer">
+                                <!-- Notes injected here -->
+                                <div class="text-center p-5 text-muted">
+                                    <i class="fa-solid fa-spinner fa-spin fa-2x mb-3"></i>
+                                    <p>Loading comprehensive study notes...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tools & Assessment Section -->
+                <div class="col-lg-4 mb-4">
+
+
+                    <!-- Generate Assessment Button -->
+                    <div class="card card-karmayogi bg-light">
+                        <div class="card-body text-center">
+                            <h5 class="card-title fw-bold mb-3"><i class="fa-solid fa-clipboard-question me-2 text-warning"></i> Practice Assessment</h5>
+                            <p class="text-muted small">Test your knowledge based on the study notes or uploaded manual.</p>
+                            <button class="btn btn-primary w-100" onclick="generateStudyMCQs()" id="btnGenerateMCQ">
+                                Generate Assessment <i class="fa-solid fa-wand-magic-sparkles ms-1"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MCQ Container -->
+            <div class="row mt-4 d-none" id="mcqSection">
+                <div class="col-12">
+                    <div class="card card-karmayogi">
+                        <div class="card-body">
+                            <h4 class="card-title fw-bold mb-4"><i class="fa-solid fa-circle-question me-2 text-primary"></i> Interactive Assessment</h4>
+                            <div id="mcqContainer">
+                                <!-- MCQs injected here -->
+                            </div>
+                            <div id="mcq_score_summary" class="alert alert-success d-none fw-semibold mt-4 fs-5 text-center shadow-sm"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        
+        <!-- Pragya AI Floating Action Button -->
+        <button class="btn btn-warning rounded-circle shadow-lg position-fixed" 
+                style="bottom: 30px; right: 30px; width: 60px; height: 60px; z-index: 1040;"
+                type="button" data-bs-toggle="offcanvas" data-bs-target="#pragyaChatDrawer" aria-controls="pragyaChatDrawer">
+            <i class="fa-solid fa-robot fa-2x text-white" style="margin-top: 3px;"></i>
+        </button>
+
+        <!-- Pragya AI Offcanvas Drawer -->
+        <div class="offcanvas offcanvas-end shadow" tabindex="-1" id="pragyaChatDrawer" aria-labelledby="pragyaChatDrawerLabel" style="width: 400px; border-left: 1px solid #E2E8F0;">
+            <div class="offcanvas-header bg-primary text-white">
+                <h5 class="offcanvas-title fw-bold" id="pragyaChatDrawerLabel">
+                    <i class="fa-solid fa-robot me-2 text-warning"></i>Pragya AI Assistant
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+            </div>
+            <div class="offcanvas-body d-flex flex-column p-0 bg-light">
+                <div id="pragyaChatHistory" class="flex-grow-1 p-3 overflow-auto" style="max-height: calc(100vh - 130px);">
+                    <div class="text-center text-muted small mt-2">
+                        Pragya is context-aware of your current study module. Ask any questions!
+                    </div>
+                </div>
+                <div class="p-3 bg-white border-top">
+                    <div class="input-group">
+                        <input type="text" id="pragyaChatInput" class="form-control form-control-sm" placeholder="Ask Pragya something..." onkeypress="if(event.key === 'Enter') window.sendPragyaQuery()">
+                        <button class="btn btn-primary btn-sm" onclick="window.sendPragyaQuery()">
+                            <i class="fa-solid fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const user = getUserSession();
+            if (typeof applyLanguage === 'function') applyLanguage(user.language);
+            if (typeof window.initStudyPage === 'function') window.initStudyPage();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        (function() {
+            var rawUser = sessionStorage.getItem('pragya_user');
+            if (!rawUser) { window.location.replace('login.html'); return; }
+            try {
+                var user = JSON.parse(rawUser);
+                if (user.role === 'supervisor') { window.location.replace('admin.html'); return; }
+            } catch(e) { window.location.replace('login.html'); }
+        })();
+    </script>
+    <title>Karmayogi Pragya - Skill Gap</title>
+    <link rel="icon" type="image/png" href="./logo.png">
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome 6 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="./css/style.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-header d-flex align-items-center gap-2 py-3 px-3">
+                <img src="./logo.png" alt="Karmayogi Pragya Logo" style="height: 38px; width: auto; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));">
+                <h4 class="mb-0 text-white fw-bold fs-5 tracking-wide">Karmayogi Pragya</h4>
+            </div>
+            <div class="sidebar-nav">
+                <a href="dashboard.html" class="sidebar-link" data-i18n="nav_dashboard"><i
+                        class="fa-solid fa-chart-pie"></i> Dashboard</a>
+                <a href="assessment.html" class="sidebar-link" data-i18n="nav_assessment"><i
+                        class="fa-solid fa-clipboard-list"></i> Diagnostic Quiz</a>
+                <a href="skill-gap.html" class="sidebar-link active" data-i18n="nav_skillgap"><i
+                        class="fa-solid fa-chart-bar"></i> Skill Gap Analysis</a>
+                <a href="study.html" class="sidebar-link" data-i18n="nav_study"><i class="fa-solid fa-book-open"></i>
+                    Study Module</a>
+                <a href="knowledge-hub.html" class="sidebar-link" data-i18n="nav_hub"><i
+                        class="fa-solid fa-file-pdf"></i> Knowledge Hub</a>
+                <a href="profile.html" class="sidebar-link" data-i18n="nav_profile"><i class="fa-solid fa-user"></i>
+                    Officer Profile</a>
+                <a href="admin.html" class="sidebar-link" data-i18n="nav_admin"><i
+                        class="fa-solid fa-shield-halved"></i> Admin Hub</a>
+            </div>
+            <div class="mt-auto p-3">
+                <a href="#" class="sidebar-link text-danger" onclick="signOut()">
+                    <i class="fa-solid fa-sign-out-alt"></i> <span data-i18n="logout">Logout</span>
+                </a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="topbar">
+                <button id="langToggleBtn" class="btn btn-outline-secondary btn-sm" onclick="toggleLanguage()">
+                    <i class="fa-solid fa-language me-1"></i> <span id="langText">हिन्दी / English</span>
+                </button>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mb-4 animate-fade-in">
+                <h2><i class="fa-solid fa-chart-bar me-2 text-primary"></i> <span data-i18n="skill_gap_analysis">Skill
+                        Gap Analysis</span></h2>
+            </div>
+
+            <div class="row animate-slide-up">
+                <div class="col-md-12 mb-4">
+                    <div class="card card-karmayogi h-100">
+                        <div class="card-body">
+                            <h5 class="card-title fw-bold" data-i18n="micro_competency_breakdown">Micro-Competency
+                                Breakdown</h5>
+                            <p class="text-muted small">Comparing your current proficiency against required benchmarks
+                                for <strong id="topicDisplay">Topic</strong>.</p>
+
+                            <!-- Placeholder Bars -->
+                            <div class="mt-4">
+                                <div class="mb-3 animate-fade-in" style="animation-delay: 0.1s;">
+                                    <div class="d-flex justify-content-between">
+                                        <span>Fundamentals</span>
+                                        <span class="text-muted">40% / 80%</span>
+                                    </div>
+                                    <div class="progress" style="height: 10px;">
+                                        <div class="progress-bar bg-warning" role="progressbar" style="width: 40%">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mb-3 animate-fade-in" style="animation-delay: 0.2s;">
+                                    <div class="d-flex justify-content-between">
+                                        <span>Application & Context</span>
+                                        <span class="text-muted">60% / 80%</span>
+                                    </div>
+                                    <div class="progress" style="height: 10px;">
+                                        <div class="progress-bar bg-info" role="progressbar" style="width: 60%"></div>
+                                    </div>
+                                </div>
+                                <div class="mb-3 animate-fade-in" style="animation-delay: 0.3s;">
+                                    <div class="d-flex justify-content-between">
+                                        <span>Advanced Architecture</span>
+                                        <span class="text-muted">20% / 70%</span>
+                                    </div>
+                                    <div class="progress" style="height: 10px;">
+                                        <div class="progress-bar bg-danger" role="progressbar" style="width: 20%"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="./js/auth.js"></script>
+    <script src="./js/apple_scroll.js"></script>
+    <script src="./js/ui_logic.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const user = getUserSession();
+            if (user.topic) {
+                document.getElementById('topicDisplay').textContent = user.topic;
+            }
+            if (typeof applyLanguage === 'function') applyLanguage(user.language);
+        });
+    </script>
+</body>
+
+</html>
