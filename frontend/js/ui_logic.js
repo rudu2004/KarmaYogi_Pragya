@@ -711,7 +711,13 @@ function _formatNotes(material) {
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/\n\n/g, '<br><br>');
 
-    return `<div class="mb-4">${notesHtml}</div>
+    return `
+            <div class="d-flex justify-content-end mb-2">
+                <button class="btn btn-sm btn-outline-primary" onclick="if(window.speechSynthesis.speaking){window.speechSynthesis.cancel(); this.innerHTML='<i class=\\'fa-solid fa-volume-high me-1\\'></i> Listen';}else{const u = new SpeechSynthesisUtterance(this.parentElement.nextElementSibling.innerText); u.onend = () => this.innerHTML='<i class=\\'fa-solid fa-volume-high me-1\\'></i> Listen'; this.innerHTML='<i class=\\'fa-solid fa-stop me-1\\'></i> Stop'; window.speechSynthesis.speak(u);}">
+                    <i class="fa-solid fa-volume-high me-1"></i> Listen
+                </button>
+            </div>
+            <div class="mb-4">${notesHtml}</div>
             <hr>
             <h5 class="fw-bold mt-4"><i class="fa-solid fa-lightbulb me-2 text-warning"></i>Practical Frameworks & Examples</h5>
             <div class="mb-3">${exHtml}</div>`;

@@ -199,6 +199,44 @@
         <!-- Dashboard Body -->
         <main class="px-8 py-6 max-w-[1400px] mx-auto" id="dashboardBody">
 
+            <!-- TABS -->
+            <div class="mb-6 border-b border-slate-200">
+                <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button onclick="switchTab('overview')" id="tab-btn-overview" class="tab-btn active-tab whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-navy-600 text-navy-600">
+                        <i class="fa-solid fa-chart-pie mr-2"></i>Overview
+                    </button>
+                    <button onclick="switchTab('roster')" id="tab-btn-roster" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300">
+                        <i class="fa-solid fa-users mr-2"></i>Officer Roster
+                    </button>
+                    <button onclick="switchTab('interventions')" id="tab-btn-interventions" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300">
+                        <i class="fa-solid fa-triangle-exclamation mr-2"></i>Intervention Ledger
+                    </button>
+                </nav>
+            </div>
+            
+            <style>
+                .active-tab { border-color: #2c4a8a !important; color: #2c4a8a !important; }
+                .tab-pane { display: none; }
+                .tab-pane.active { display: block; }
+            </style>
+            
+            <script>
+                function switchTab(tabId) {
+                    document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+                    document.querySelectorAll('.tab-btn').forEach(el => {
+                        el.classList.remove('active-tab', 'border-navy-600', 'text-navy-600');
+                        el.classList.add('border-transparent', 'text-slate-500');
+                    });
+                    
+                    document.getElementById('tab-' + tabId).classList.add('active');
+                    const btn = document.getElementById('tab-btn-' + tabId);
+                    btn.classList.remove('border-transparent', 'text-slate-500');
+                    btn.classList.add('active-tab', 'border-navy-600', 'text-navy-600');
+                }
+            </script>
+
+
+            <div id="tab-overview" class="tab-pane active">
             <!-- KPI CARDS ROW -->
             <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8" id="kpiSection">
                 <!-- Populated by JS -->
@@ -233,6 +271,9 @@
                 </div>
             </section>
 
+            </div>
+
+            <div id="tab-roster" class="tab-pane">
             <!-- OFFICER ROSTER -->
             <section class="bg-white border border-slate-200 rounded-xl p-6 mb-8 animate-in" style="animation-delay: 0.4s;">
                 <div class="flex items-center justify-between mb-5">
@@ -262,6 +303,9 @@
                 </div>
             </section>
 
+            </div>
+
+            <div id="tab-interventions" class="tab-pane">
             <!-- INTERVENTION LEDGER -->
             <section class="bg-white border border-slate-200 rounded-xl p-6 mb-8 animate-in" style="animation-delay: 0.5s;">
                 <div class="flex items-center justify-between mb-5">
@@ -291,6 +335,8 @@
                     </table>
                 </div>
             </section>
+
+        </div>
 
         </main>
     </div>

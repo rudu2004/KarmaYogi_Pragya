@@ -6,6 +6,17 @@ from google import genai
 from google.genai import types
 from typing import List, Dict, Any
 
+
+def clean_json_response(raw: str) -> str:
+    """Clean markdown backticks and escape invalid JSON backslashes (like LaTeX \sum)."""
+    raw = re.sub(r"^```json\s*", "", raw.strip())
+    raw = re.sub(r"^```\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
+    # Escape single backslashes not followed by JSON valid escape chars
+    raw = re.sub(r'\\(?![\"\\/bfnrtu])', r'\\\\', raw)
+    return raw
+
+
 MODEL_NAME = "gemini-3.6-flash"
 
 
@@ -194,7 +205,7 @@ def generate_adaptive_quiz(topic: str, language: str = "en") -> List[Dict[str, A
     """
     try:
         raw = _call_llm_with_fallback(prompt, temperature=0.2)
-        data = json.loads(raw)
+        data = json.loads(clean_json_response(raw))
         if isinstance(data, dict):
             for key in ("questions", "quiz", "data"):
                 if key in data and isinstance(data[key], list):
@@ -307,7 +318,7 @@ Return ONLY a JSON object with key "pathway" containing an array of 3 courses:
         raw = re.sub(r"^```json\s*", "", raw.strip())
         raw = re.sub(r"^```\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
-        data = json.loads(raw)
+        data = json.loads(clean_json_response(raw))
         pathway_list = None
         if isinstance(data, dict):
             for key in ("pathway", "courses", "steps", "data"):
@@ -738,7 +749,7 @@ Return ONLY a single JSON object containing an "mcqs" key with an array of exact
 """
     try:
         raw = _call_llm_with_fallback(prompt, temperature=0.3)
-        data = json.loads(raw)
+        data = json.loads(clean_json_response(raw))
         if isinstance(data, dict):
             for key in ("mcqs", "questions", "data"):
                 if key in data and isinstance(data[key], list) and len(data[key]) > 0:

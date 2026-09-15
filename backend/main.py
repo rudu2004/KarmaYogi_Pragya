@@ -68,7 +68,7 @@ def init_telemetry_db():
     cur = conn.cursor()
 
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS officials (
+        CREATE TABLE IF NOT EXISTS officers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             cadre TEXT NOT NULL,
@@ -82,16 +82,51 @@ def init_telemetry_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS assessment_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            official_id INTEGER NOT NULL,
+            officer_id INTEGER NOT NULL,
             competency_domain TEXT NOT NULL,
             score_pct REAL NOT NULL,
             assessed_on TEXT NOT NULL DEFAULT (datetime('now')),
             status TEXT NOT NULL DEFAULT 'ADEQUATE',
-            FOREIGN KEY (official_id) REFERENCES officials(id)
+            FOREIGN KEY (officer_id) REFERENCES officers(id)
         )
     """)
 
     # ─── Users table for authentication ────────────────────────────────────
+    
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS officer_courses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            officer_id INTEGER NOT NULL,
+            course_id TEXT NOT NULL,
+            status TEXT DEFAULT 'Enrolled',
+            progress_pct REAL DEFAULT 0.0,
+            enrolled_on TEXT DEFAULT (datetime('now')),
+            completed_on TEXT,
+            FOREIGN KEY(officer_id) REFERENCES officers(id)
+        )
+    ''')
+
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS supervisory_interventions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            officer_id INTEGER NOT NULL,
+            competency_domain TEXT NOT NULL,
+            intervention_type TEXT,
+            status TEXT DEFAULT 'Pending',
+            assigned_on TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY(officer_id) REFERENCES officers(id)
+        )
+    ''')
+
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS document_knowledge_base (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT NOT NULL,
+            uploaded_by TEXT,
+            uploaded_on TEXT DEFAULT (datetime('now'))
+        )
+    ''')
+
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,7 +144,7 @@ def init_telemetry_db():
     conn.commit()
 
     # ─── Seed only if empty ────────────────────────────────────────────────
-    cur.execute("SELECT COUNT(*) FROM officials")
+    cur.execute("SELECT COUNT(*) FROM officers")
     if cur.fetchone()[0] == 0:
         _seed_telemetry_data(cur, conn)
 
@@ -161,51 +196,51 @@ def _seed_telemetry_data(cur, conn):
     random.seed(42)  # Deterministic for reproducibility
     base_date = datetime.now() - timedelta(days=90)
 
-    official_ids = []
+    officer_ids = []
     for off in SEED_OFFICIALS:
         enrolled = (base_date - timedelta(days=random.randint(10, 80))).strftime("%Y-%m-%d %H:%M:%S")
         cur.execute(
-            "INSERT INTO officials (name, cadre, department, designation, posting_state, enrolled_on) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO officers (name, cadre, department, designation, posting_state, enrolled_on) VALUES (?, ?, ?, ?, ?, ?)",
             (off["name"], off["cadre"], off["department"], off["designation"], off["posting_state"], enrolled)
         )
-        official_ids.append(cur.lastrowid)
+        officer_ids.append(cur.lastrowid)
 
     # Generate 18 historical assessment records with deliberate DEFICITs
     assessment_records = [
         # Ananya Sharma (strong overall, one deficit)
-        (official_ids[0], "Survey Methodology",              82.0, -75),
-        (official_ids[0], "National Accounts & GDP",         91.0, -60),
-        (official_ids[0], "Data Governance & Ethics",        35.0, -45),  # DEFICIT
-        (official_ids[0], "Statistical Computing (R/Python)", 78.0, -30),
+        (officer_ids[0], "Survey Methodology",              82.0, -75),
+        (officer_ids[0], "National Accounts & GDP",         91.0, -60),
+        (officer_ids[0], "Data Governance & Ethics",        35.0, -45),  # DEFICIT
+        (officer_ids[0], "Statistical Computing (R/Python)", 78.0, -30),
 
         # Vikram Patel (mixed, two deficits)
-        (official_ids[1], "Price Index Compilation",         28.0, -70),  # DEFICIT
-        (official_ids[1], "Sampling Theory",                 44.0, -55),
-        (official_ids[1], "Macro-Economic Indicators",       33.0, -40),  # DEFICIT
-        (official_ids[1], "Data Visualization",              67.0, -25),
+        (officer_ids[1], "Price Index Compilation",         28.0, -70),  # DEFICIT
+        (officer_ids[1], "Sampling Theory",                 44.0, -55),
+        (officer_ids[1], "Macro-Economic Indicators",       33.0, -40),  # DEFICIT
+        (officer_ids[1], "Data Visualization",              67.0, -25),
 
         # Priya Nair (excellent performer)
-        (official_ids[2], "Survey Methodology",              95.0, -65),
-        (official_ids[2], "National Accounts & GDP",         88.0, -50),
-        (official_ids[2], "Statistical Computing (R/Python)", 92.0, -35),
+        (officer_ids[2], "Survey Methodology",              95.0, -65),
+        (officer_ids[2], "National Accounts & GDP",         88.0, -50),
+        (officer_ids[2], "Statistical Computing (R/Python)", 92.0, -35),
 
         # Rajesh Kumar Singh (struggling, multiple deficits)
-        (official_ids[3], "Data Governance & Ethics",        22.0, -72),  # DEFICIT
-        (official_ids[3], "Price Index Compilation",         38.0, -58),  # DEFICIT
-        (official_ids[3], "Sampling Theory",                 19.0, -43),  # DEFICIT
-        (official_ids[3], "Data Visualization",              55.0, -28),
+        (officer_ids[3], "Data Governance & Ethics",        22.0, -72),  # DEFICIT
+        (officer_ids[3], "Price Index Compilation",         38.0, -58),  # DEFICIT
+        (officer_ids[3], "Sampling Theory",                 19.0, -43),  # DEFICIT
+        (officer_ids[3], "Data Visualization",              55.0, -28),
 
         # Meera Joshi (senior leadership, needs upskilling in tech)
-        (official_ids[4], "Survey Methodology",              75.0, -68),
-        (official_ids[4], "Statistical Computing (R/Python)", 31.0, -48),  # DEFICIT
-        (official_ids[4], "Macro-Economic Indicators",       85.0, -33),
+        (officer_ids[4], "Survey Methodology",              75.0, -68),
+        (officer_ids[4], "Statistical Computing (R/Python)", 31.0, -48),  # DEFICIT
+        (officer_ids[4], "Macro-Economic Indicators",       85.0, -33),
     ]
 
     for (oid, domain, score, day_offset) in assessment_records:
         assessed = (datetime.now() + timedelta(days=day_offset)).strftime("%Y-%m-%d %H:%M:%S")
         status = "DEFICIT" if score < 40.0 else ("PROFICIENT" if score >= 80.0 else "ADEQUATE")
         cur.execute(
-            "INSERT INTO assessment_log (official_id, competency_domain, score_pct, assessed_on, status) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO assessment_log (officer_id, competency_domain, score_pct, assessed_on, status) VALUES (?, ?, ?, ?, ?)",
             (oid, domain, score, assessed, status)
         )
 
@@ -219,7 +254,7 @@ def get_telemetry_summary() -> Dict[str, Any]:
     cur = conn.cursor()
 
     # Total enrolled
-    cur.execute("SELECT COUNT(*) as cnt FROM officials")
+    cur.execute("SELECT COUNT(*) as cnt FROM officers")
     total_enrolled = cur.fetchone()["cnt"]
 
     # Total assessments
@@ -256,8 +291,8 @@ def get_telemetry_summary() -> Dict[str, Any]:
                ROUND(AVG(a.score_pct), 1) as avg_score,
                COUNT(a.id) as assessments_taken,
                SUM(CASE WHEN a.status = 'DEFICIT' THEN 1 ELSE 0 END) as deficit_areas
-        FROM officials o
-        LEFT JOIN assessment_log a ON o.id = a.official_id
+        FROM officers o
+        LEFT JOIN assessment_log a ON o.id = a.officer_id
         GROUP BY o.id
         ORDER BY avg_score ASC
     """)
@@ -268,7 +303,7 @@ def get_telemetry_summary() -> Dict[str, Any]:
         SELECT a.id, o.name, o.department, o.cadre,
                a.competency_domain, a.score_pct, a.assessed_on, a.status
         FROM assessment_log a
-        JOIN officials o ON a.official_id = o.id
+        JOIN officers o ON a.officer_id = o.id
         WHERE a.status = 'DEFICIT'
         ORDER BY a.score_pct ASC
     """)
@@ -279,8 +314,8 @@ def get_telemetry_summary() -> Dict[str, Any]:
         SELECT o.department,
                COUNT(DISTINCT o.id) as officer_count,
                ROUND(AVG(a.score_pct), 1) as dept_avg_score
-        FROM officials o
-        LEFT JOIN assessment_log a ON o.id = a.official_id
+        FROM officers o
+        LEFT JOIN assessment_log a ON o.id = a.officer_id
         GROUP BY o.department
         ORDER BY dept_avg_score ASC
     """)
@@ -360,7 +395,7 @@ class PragyaQuery(BaseModel):
     language: Optional[str] = "en"
 
 class AssessmentEntry(BaseModel):
-    official_id: int
+    officer_id: int
     competency_domain: str
     score_pct: float
 
@@ -407,10 +442,10 @@ def register_user(req: RegisterRequest):
         )
         user_id = cur.lastrowid
 
-        # If officer role, also link to officials table for roster visibility
+        # If officer role, also link to officers table for roster visibility
         if req.role == "officer":
             cur.execute(
-                "INSERT INTO officials (name, cadre, department, designation, posting_state) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO officers (name, cadre, department, designation, posting_state) VALUES (?, ?, ?, ?, ?)",
                 (req.full_name, req.cadre or "General Cadre", req.department or "MoSPI", req.designation or "Statistical Officer", "Delhi")
             )
 
@@ -517,8 +552,8 @@ def log_assessment(entry: AssessmentEntry):
         conn = sqlite3.connect(LEDGER_DB)
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO assessment_log (official_id, competency_domain, score_pct, status) VALUES (?, ?, ?, ?)",
-            (entry.official_id, entry.competency_domain, entry.score_pct, status)
+            "INSERT INTO assessment_log (officer_id, competency_domain, score_pct, status) VALUES (?, ?, ?, ?)",
+            (entry.officer_id, entry.competency_domain, entry.score_pct, status)
         )
         conn.commit()
         conn.close()
@@ -537,8 +572,8 @@ def list_officers():
         SELECT o.*, 
                COALESCE(ROUND(AVG(a.score_pct), 1), 0) as avg_score,
                COUNT(a.id) as total_assessments
-        FROM officials o
-        LEFT JOIN assessment_log a ON o.id = a.official_id
+        FROM officers o
+        LEFT JOIN assessment_log a ON o.id = a.officer_id
         GROUP BY o.id
     """)
     rows = [dict(r) for r in cur.fetchall()]
@@ -746,3 +781,4 @@ if os.path.isdir(FRONTEND_DIR):
     app.mount("/", StaticFiles(directory=FRONTEND_DIR), name="frontend-static")
 
 # run: python -m uvicorn main:app --reload --port 8000
+
