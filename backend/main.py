@@ -82,25 +82,33 @@ def init_telemetry_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS assessment_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            officer_id TEXT,
-            competency_domain TEXT NOT NULL,
-            score_pct REAL NOT NULL,
+            officer_id TEXT DEFAULT 'OFFICER_DEMO_001',
+            official_id TEXT DEFAULT 'OFFICER_DEMO_001',
+            competency_domain TEXT NOT NULL DEFAULT 'General',
+            score_pct REAL NOT NULL DEFAULT 60.0,
             assessed_on TEXT NOT NULL DEFAULT (datetime('now')),
             status TEXT NOT NULL DEFAULT 'ADEQUATE',
             FOREIGN KEY (officer_id) REFERENCES officers(id)
         )
     """)
 
-    # Safe migration check: add officer_id column if table was created previously without it
+    # Safe migration check: add officer_id and official_id columns if pre-existing without them
     try:
-        cur.execute("ALTER TABLE assessment_log ADD COLUMN officer_id TEXT;")
+        cur.execute("ALTER TABLE assessment_log ADD COLUMN officer_id TEXT DEFAULT 'OFFICER_DEMO_001';")
         conn.commit()
     except Exception:
-        pass  # Column likely already exists
+        pass
 
-    # If legacy official_id column exists, copy data into officer_id
     try:
-        cur.execute("UPDATE assessment_log SET officer_id = official_id WHERE officer_id IS NULL AND official_id IS NOT NULL;")
+        cur.execute("ALTER TABLE assessment_log ADD COLUMN official_id TEXT DEFAULT 'OFFICER_DEMO_001';")
+        conn.commit()
+    except Exception:
+        pass
+
+    # Synchronize officer_id and official_id in existing records
+    try:
+        cur.execute("UPDATE assessment_log SET officer_id = official_id WHERE (officer_id IS NULL OR officer_id = '') AND official_id IS NOT NULL;")
+        cur.execute("UPDATE assessment_log SET official_id = officer_id WHERE (official_id IS NULL OR official_id = '') AND officer_id IS NOT NULL;")
         conn.commit()
     except Exception:
         pass
@@ -217,7 +225,7 @@ def _seed_telemetry_data(cur, conn):
             "INSERT INTO officers (name, cadre, department, designation, posting_state, enrolled_on) VALUES (?, ?, ?, ?, ?, ?)",
             (off["name"], off["cadre"], off["department"], off["designation"], off["posting_state"], enrolled)
         )
-        officer_ids.append(cur.lastrowid)
+        officer_ids.append(cur.lastrowid if cur.lastrowid else (len(officer_ids) + 1))
 
     # Generate 18 historical assessment records with deliberate DEFICITs
     assessment_records = [
@@ -250,13 +258,29 @@ def _seed_telemetry_data(cur, conn):
         (officer_ids[4], "Macro-Economic Indicators",       85.0, -33),
     ]
 
+    cur.execute("PRAGMA table_info(assessment_log)")
+    log_cols = {row[1] for row in cur.fetchall()}
+
     for (oid, domain, score, day_offset) in assessment_records:
         assessed = (datetime.now() + timedelta(days=day_offset)).strftime("%Y-%m-%d %H:%M:%S")
         status = "DEFICIT" if score < 40.0 else ("PROFICIENT" if score >= 80.0 else "ADEQUATE")
-        cur.execute(
-            "INSERT INTO assessment_log (officer_id, competency_domain, score_pct, assessed_on, status) VALUES (?, ?, ?, ?, ?)",
-            (oid, domain, score, assessed, status)
-        )
+        target_oid = str(oid) if oid is not None else "OFFICER_DEMO_001"
+
+        if "official_id" in log_cols and "officer_id" in log_cols:
+            cur.execute(
+                "INSERT INTO assessment_log (officer_id, official_id, competency_domain, score_pct, assessed_on, status) VALUES (?, ?, ?, ?, ?, ?)",
+                (target_oid, target_oid, domain, score, assessed, status)
+            )
+        elif "official_id" in log_cols:
+            cur.execute(
+                "INSERT INTO assessment_log (official_id, competency_domain, score_pct, assessed_on, status) VALUES (?, ?, ?, ?, ?)",
+                (target_oid, domain, score, assessed, status)
+            )
+        else:
+            cur.execute(
+                "INSERT INTO assessment_log (officer_id, competency_domain, score_pct, assessed_on, status) VALUES (?, ?, ?, ?, ?)",
+                (target_oid, domain, score, assessed, status)
+            )
 
     conn.commit()
 
@@ -565,10 +589,26 @@ def log_assessment(entry: AssessmentEntry):
         status = "DEFICIT" if entry.score_pct < 40.0 else ("PROFICIENT" if entry.score_pct >= 80.0 else "ADEQUATE")
         conn = sqlite3.connect(LEDGER_DB)
         cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO assessment_log (officer_id, competency_domain, score_pct, status) VALUES (?, ?, ?, ?)",
-            (entry.officer_id, entry.competency_domain, entry.score_pct, status)
-        )
+        cur.execute("PRAGMA table_info(assessment_log)")
+        log_cols = {row[1] for row in cur.fetchall()}
+        target_oid = str(entry.officer_id) if entry.officer_id is not None else "OFFICER_DEMO_001"
+
+        if "official_id" in log_cols and "officer_id" in log_cols:
+            cur.execute(
+                "INSERT INTO assessment_log (officer_id, official_id, competency_domain, score_pct, status) VALUES (?, ?, ?, ?, ?)",
+                (target_oid, target_oid, entry.competency_domain, entry.score_pct, status)
+            )
+        elif "official_id" in log_cols:
+            cur.execute(
+                "INSERT INTO assessment_log (official_id, competency_domain, score_pct, status) VALUES (?, ?, ?, ?)",
+                (target_oid, entry.competency_domain, entry.score_pct, status)
+            )
+        else:
+            cur.execute(
+                "INSERT INTO assessment_log (officer_id, competency_domain, score_pct, status) VALUES (?, ?, ?, ?)",
+                (target_oid, entry.competency_domain, entry.score_pct, status)
+            )
+
         conn.commit()
         conn.close()
         return {"message": "Assessment logged", "status": status, "score": entry.score_pct}
