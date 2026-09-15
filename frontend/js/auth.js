@@ -51,3 +51,35 @@ function signOut() {
     localStorage.clear();
     window.location.replace('/login.html');
 }
+
+// ─── Role-Based Sidebar Access Control (RBAC) ────────────────────────────────
+// Dynamically hides admin-only sidebar links for non-admin/non-supervisor users.
+// Any sidebar link with data-role="admin-only" will be removed from the DOM
+// unless the user's role (from sessionStorage 'pragya_user') is 'supervisor' or 'admin'.
+(function enforceRoleSidebar() {
+    function applySidebarRBAC() {
+        let userRole = 'officer'; // default
+        try {
+            const raw = sessionStorage.getItem('pragya_user');
+            if (raw) {
+                const u = JSON.parse(raw);
+                userRole = (u.role || 'officer').toLowerCase();
+            }
+        } catch (e) {}
+
+        const isAdmin = (userRole === 'supervisor' || userRole === 'admin');
+
+        document.querySelectorAll('[data-role="admin-only"]').forEach(el => {
+            if (!isAdmin) {
+                el.style.display = 'none';
+                el.setAttribute('aria-hidden', 'true');
+            }
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', applySidebarRBAC);
+    } else {
+        applySidebarRBAC();
+    }
+})();
