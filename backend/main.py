@@ -82,7 +82,7 @@ def init_telemetry_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS assessment_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            officer_id INTEGER NOT NULL,
+            officer_id TEXT,
             competency_domain TEXT NOT NULL,
             score_pct REAL NOT NULL,
             assessed_on TEXT NOT NULL DEFAULT (datetime('now')),
@@ -90,6 +90,20 @@ def init_telemetry_db():
             FOREIGN KEY (officer_id) REFERENCES officers(id)
         )
     """)
+
+    # Safe migration check: add officer_id column if table was created previously without it
+    try:
+        cur.execute("ALTER TABLE assessment_log ADD COLUMN officer_id TEXT;")
+        conn.commit()
+    except Exception:
+        pass  # Column likely already exists
+
+    # If legacy official_id column exists, copy data into officer_id
+    try:
+        cur.execute("UPDATE assessment_log SET officer_id = official_id WHERE officer_id IS NULL AND official_id IS NOT NULL;")
+        conn.commit()
+    except Exception:
+        pass
 
     # ─── Users table for authentication ────────────────────────────────────
     
