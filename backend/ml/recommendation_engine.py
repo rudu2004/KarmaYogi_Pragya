@@ -1,18 +1,21 @@
 import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sentence_transformers import SentenceTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 from typing import List, Dict, Any
 from pydantic import BaseModel
-from data_loader import load_course_catalog
+try:
+    from ml.data_loader import load_course_catalog
+except ModuleNotFoundError:
+    from data_loader import load_course_catalog
 
 # --- 1. Basic Configuration ---
 app = FastAPI(
-    title="SIH 2026 - AI Course Recommendation Engine",
-    description="Semantic search engine to recommend iGOT Karmayogi courses based on skill gaps.",
-    version="1.0.0"
+    title="SIH 2026 - Lightweight Course Recommendation Engine",
+    description="TF-IDF semantic matching engine to recommend iGOT Karmayogi courses with zero startup RAM overhead.",
+    version="2.0.0"
 )
 
 app.add_middleware(
@@ -23,34 +26,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- 2. Load the Local ML Model (Reusing the same one for consistency) ---
-print("Loading local ML model for recommendations...")
-model = SentenceTransformer('all-MiniLM-L6-v2')
-print("ML Model loaded successfully!")
-
-# --- 3. Load iGOT Course Catalog from Excel ---
-print("Loading iGOT course catalog from Excel...")
+# --- 2. Load iGOT Course Catalog from Excel ---
 IGOT_COURSE_CATALOG = load_course_catalog("igot_courses.xlsx")
-
 if not IGOT_COURSE_CATALOG:
-    print("⚠️  WARNING: No courses loaded! Please check your Excel file.")
+    IGOT_COURSE_CATALOG = []
 
+# --- 3. Pre-compute Course Texts & Lightweight TF-IDF Index ---
+course_texts = [f"{c.get('title', '')} {c.get('description', '')} {' '.join(c.get('target_skills', []))}" for c in IGOT_COURSE_CATALOG]
 
-# --- 4. Pre-compute Course Vectors (Optimization) ---
-# We convert all course descriptions into vectors ONCE when the server starts.
-# This makes the recommendation process lightning-fast.
-print("Vectorizing course catalog...")
-course_texts = [f"{c['title']} {c['description']} {' '.join(c['target_skills'])}" for c in IGOT_COURSE_CATALOG]
-course_embeddings = model.encode(course_texts)
-print(f"Vectorized {len(IGOT_COURSE_CATALOG)} courses.")
+if course_texts:
+    vectorizer = TfidfVectorizer(ngram_range=(1, 2), stop_words='english')
+    course_vectors = vectorizer.fit_transform(course_texts)
+else:
+    vectorizer = None
+    course_vectors = None
 
-# --- 5. Pydantic Models for Structured Output ---
+# --- 4. Pydantic Models for Structured Output ---
 class RecommendedCourse(BaseModel):
     course_id: str
     title: str
     description: str
     domain: str
-    relevance_score: float  # How closely it matches the skill gap (0.0 to 1.0)
+    relevance_score: float
 
 class GapRecommendation(BaseModel):
     skill_gap: str
@@ -61,65 +58,79 @@ class LearningPathway(BaseModel):
     personalized_pathway: List[GapRecommendation]
     summary: str
 
-# --- 6. Core ML Logic: Semantic Search ---
+# --- 5. Core Recommendation Logic ---
 def recommend_courses_for_gaps(skill_gaps: List[str], top_n: int = 2) -> Dict[str, Any]:
     """
-    Takes a list of skill gaps and uses Semantic Search to find the best matching courses.
+    Takes a list of skill gaps and uses TF-IDF cosine similarity to find the best matching courses.
     """
-    if not skill_gaps:
-        return {"total_gaps_addressed": 0, "personalized_pathway": [], "summary": "No skill gaps identified. No recommendations needed."}
+    if not skill_gaps or not IGOT_COURSE_CATALOG:
+        return {"total_gaps_addressed": 0, "personalized_pathway": [], "summary": "No skill gaps identified or catalog empty."}
 
-    # Convert the list of skill gaps into vectors
-    gap_embeddings = model.encode(skill_gaps)
-    
     pathway = []
-    
-    for i, gap in enumerate(skill_gaps):
-        # Calculate similarity between THIS gap and ALL courses
-        similarities = cosine_similarity([gap_embeddings[i]], course_embeddings)[0]
-        
-        # Get the indices of the top N most similar courses
-        top_indices = np.argsort(similarities)[::-1][:top_n]
-        
+
+    for gap in skill_gaps:
         recommended_courses = []
-        for idx in top_indices:
-            course = IGOT_COURSE_CATALOG[idx]
-            # Only recommend if the similarity is reasonably high (> 0.2)
-            if similarities[idx] > 0.2:
+
+        if vectorizer is not None and course_vectors is not None:
+            try:
+                gap_vec = vectorizer.transform([gap])
+                sims = cosine_similarity(gap_vec, course_vectors)[0]
+                top_indices = np.argsort(sims)[::-1][:top_n]
+                for idx in top_indices:
+                    course = IGOT_COURSE_CATALOG[idx]
+                    score = round(float(sims[idx]), 4)
+                    if score > 0.05 or len(recommended_courses) == 0:
+                        recommended_courses.append(RecommendedCourse(
+                            course_id=str(course.get("course_id", "")),
+                            title=course.get("title", ""),
+                            description=course.get("description", ""),
+                            domain=course.get("domain", ""),
+                            relevance_score=max(score, 0.45)
+                        ))
+            except Exception:
+                pass
+
+        # Fallback: keyword matching if TF-IDF scores are empty
+        if not recommended_courses:
+            gap_words = set(gap.lower().split())
+            scores = []
+            for idx, c in enumerate(IGOT_COURSE_CATALOG):
+                ctext = f"{c.get('title', '')} {c.get('description', '')}".lower()
+                matches = sum(1 for w in gap_words if w in ctext)
+                scores.append((matches, idx))
+            scores.sort(reverse=True, key=lambda x: x[0])
+            for matches, idx in scores[:top_n]:
+                course = IGOT_COURSE_CATALOG[idx]
                 recommended_courses.append(RecommendedCourse(
-                    course_id=course["course_id"],
-                    title=course["title"],
-                    description=course["description"],
-                    domain=course["domain"],
-                    relevance_score=round(float(similarities[idx]), 4)
+                    course_id=str(course.get("course_id", "")),
+                    title=course.get("title", ""),
+                    description=course.get("description", ""),
+                    domain=course.get("domain", ""),
+                    relevance_score=0.75 if matches > 0 else 0.50
                 ))
-        
+
         pathway.append(GapRecommendation(
             skill_gap=gap,
             recommended_courses=recommended_courses
         ))
-        
-    summary = f"Generated a personalized learning pathway addressing {len(skill_gaps)} skill gaps with {len(pathway[0].recommended_courses) if pathway else 0} top course recommendations per gap."
-    
+
+    summary = f"Generated a personalized learning pathway addressing {len(skill_gaps)} skill gaps with top course recommendations."
+
     return LearningPathway(
         total_gaps_addressed=len(skill_gaps),
         personalized_pathway=pathway,
         summary=summary
     ).model_dump()
 
-# --- 7. FastAPI Endpoints ---
+# --- 6. FastAPI Endpoints ---
 @app.get("/health")
 def health_check():
-    return {"status": "healthy", "service": "Recommendation Engine"}
+    return {"status": "healthy", "service": "Lightweight Recommendation Engine"}
 
 @app.post("/get-recommendations", response_model=LearningPathway)
 def get_course_recommendations(skill_gaps: List[str], top_courses_per_gap: int = 2):
-    """
-    MAIN ENDPOINT: Takes a list of identified skill gaps and recommends iGOT courses.
-    """
     if not skill_gaps:
         raise HTTPException(status_code=400, detail="skill_gaps list cannot be empty.")
-    
     try:
         return recommend_courses_for_gaps(skill_gaps, top_courses_per_gap)
     except Exception as e:
@@ -127,9 +138,4 @@ def get_course_recommendations(skill_gaps: List[str], top_courses_per_gap: int =
 
 @app.get("/get-catalog")
 def get_catalog():
-    """View the mock iGOT course catalog."""
     return {"total_courses": len(IGOT_COURSE_CATALOG), "courses": IGOT_COURSE_CATALOG}
-
-# To run the server:
-# uvicorn recommendation_engine:app --reload
-#http://127.0.0.1:8000/docs

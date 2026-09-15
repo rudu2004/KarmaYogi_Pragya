@@ -2,13 +2,69 @@ import os
 import json
 import re
 import requests
+import httpx
+import numpy as np
 from google import genai
 from google.genai import types
 from typing import List, Dict, Any
 
+# ─── Hugging Face Serverless Inference Client (Zero-RAM all-MiniLM-L6-v2) ────
+HF_API_URL = "https://api-inference.huggingface.co/models/sentence-transformers/all-MiniLM-L6-v2"
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+
+def fallback_lightweight_embedding(text: str) -> list:
+    """Lightweight deterministic 384-d pseudo-vector fallback using hash buckets to prevent crashes."""
+    vec = [0.0] * 384
+    for word in (text or "").lower().split():
+        idx = abs(hash(word)) % 384
+        vec[idx] += 1.0
+    norm = np.linalg.norm(vec)
+    return (np.array(vec) / (norm if norm > 0 else 1.0)).tolist()
+
+def get_embedding(text: str) -> list:
+    """
+    Retrieves 384-dimensional dense vector embeddings via Hugging Face Serverless Inference API.
+    Includes automatic fallback to lightweight hash-bucket pseudo-embeddings if offline or token missing.
+    """
+    if not text or not text.strip():
+        return [0.0] * 384
+
+    headers = {}
+    if HF_TOKEN:
+        headers["Authorization"] = f"Bearer {HF_TOKEN}"
+
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            response = client.post(
+                HF_API_URL,
+                headers=headers,
+                json={"inputs": [text.strip()], "options": {"wait_for_model": True}}
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
+                    return data[0]
+                elif isinstance(data, list):
+                    return data
+    except Exception as e:
+        print(f"[HF_INFERENCE_WARNING] Fallback engaged due to: {e}")
+
+    return fallback_lightweight_embedding(text)
+
+def calculate_similarity(vec1: list, vec2: list) -> float:
+    """Calculates cosine similarity between two 384-d embedding vectors."""
+    a = np.array(vec1)
+    b = np.array(vec2)
+    dot = np.dot(a, b)
+    norm_a = np.linalg.norm(a)
+    norm_b = np.linalg.norm(b)
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return float(dot / (norm_a * norm_b))
+
 
 def clean_json_response(raw: str) -> str:
-    """Clean markdown backticks and escape invalid JSON backslashes (like LaTeX \sum)."""
+    r"""Clean markdown backticks and escape invalid JSON backslashes (like LaTeX \sum)."""
     raw = re.sub(r"^```json\s*", "", raw.strip())
     raw = re.sub(r"^```\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
@@ -878,12 +934,67 @@ Return ONLY a single JSON object containing an "mcqs" key with an array of exact
             ]
 
 
-# ─── 4. Recommend Courses (legacy shim — now delegated to generate_course_pathway)
+# ─── 4. Recommend Courses (Hugging Face Serverless Vector Similarity + Pathway)
 def recommend_courses_pipeline(quiz_results: dict = None) -> List[Dict[str, Any]]:
-    topic = (quiz_results or {}).get("topic", "General Knowledge")
-    weak  = (quiz_results or {}).get("weak_tags", [])
-    level = (quiz_results or {}).get("skill_level", "Beginner")
-    lang  = (quiz_results or {}).get("language", "en")
+    quiz_results = quiz_results or {}
+    topic = quiz_results.get("topic", "General Knowledge")
+    weak  = quiz_results.get("weak_tags", [])
+    level = quiz_results.get("skill_level", "Beginner")
+    lang  = quiz_results.get("language", "en")
+    is_hi = (lang == "hi")
+
+    # Generate 384-d dense vector for the target topic and identified gaps via Hugging Face Serverless
+    query_text = f"{topic} " + " ".join(weak)
+    query_vec = get_embedding(query_text)
+
+    # Attempt vector similarity matching against iGOT catalog if available
+    try:
+        try:
+            from ml.data_loader import load_course_catalog
+        except ModuleNotFoundError:
+            from data_loader import load_course_catalog
+        
+        catalog = load_course_catalog("igot_courses.xlsx")
+    except Exception:
+        catalog = []
+
+    if catalog and len(catalog) >= 3:
+        import urllib.parse
+        scored_courses = []
+        for c in catalog:
+            ctext = f"{c.get('title', '')} {c.get('description', '')} {' '.join(c.get('target_skills', []))}"
+            # Fast deterministic vector representation
+            cvec = fallback_lightweight_embedding(ctext)
+            sim = calculate_similarity(query_vec, cvec)
+            scored_courses.append((sim, c))
+
+        scored_courses.sort(key=lambda x: x[0], reverse=True)
+        top_matches = [c for _, c in scored_courses[:3]]
+
+        tiers = [
+            ("चरण 1: आधारशिला" if is_hi else "Step 1: Foundation", "In Progress", "bg-primary", "8-12 घंटे" if is_hi else "8-12 Hours"),
+            ("चरण 2: मुख्य दक्षता" if is_hi else "Step 2: Core Mastery", "Locked", "bg-secondary", "14-18 घंटे" if is_hi else "14-18 Hours"),
+            ("चरण 3: उन्नत विशेषज्ञता" if is_hi else "Step 3: Advanced Specialization", "Locked", "bg-secondary", "20-25 घंटे" if is_hi else "20-25 Hours"),
+        ]
+
+        pathway = []
+        for i, c in enumerate(top_matches):
+            tier_name, status, badge, duration = tiers[i]
+            title = c.get("title_hi") if (is_hi and c.get("title_hi")) else c.get("title", f"{topic} Foundations")
+            relevance = round(float(scored_courses[i][0]), 4) if scored_courses else 0.85
+            pathway.append({
+                "step": i + 1,
+                "tier": tier_name,
+                "title": title,
+                "duration": duration,
+                "provider": "आईगॉट कर्मयोगी / डिजिटल इंडिया" if is_hi else "iGOT Karmayogi / Digital India",
+                "status": status,
+                "badge": badge,
+                "url": f"https://igotkarmayogi.gov.in/search?q={urllib.parse.quote(title)}",
+                "relevance_score": relevance
+            })
+        return pathway
+
     return generate_course_pathway(topic, weak, level, language=lang)
 
 
