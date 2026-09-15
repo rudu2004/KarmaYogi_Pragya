@@ -4,8 +4,7 @@ import re
 import requests
 import httpx
 import numpy as np
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 from typing import List, Dict, Any
 
 # ─── Hugging Face Serverless Inference Client (Zero-RAM all-MiniLM-L6-v2) ────
@@ -73,38 +72,51 @@ def clean_json_response(raw: str) -> str:
     return raw
 
 
-MODEL_NAME = "gemini-3.6-flash"
+MODEL_NAME = "gemini-1.5-flash"
 
 
 def get_gemini_client():
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         return None
-    return genai.Client(api_key=api_key)
+    genai.configure(api_key=api_key)
+    return genai
 
 
-def _call_gemini_model(prompt: str, model_name: str = "gemini-3.5-flash-lite", timeout: float = 25.0, temperature: float = 0.3, json_mode: bool = True) -> str:
-    """Central helper: call specified Gemini model with timeout and return raw text."""
-    client = get_gemini_client()
-    if not client:
+def _call_gemini_model(prompt: str, model_name: str = "gemini-1.5-flash", timeout: float = 25.0, temperature: float = 0.3, json_mode: bool = True) -> str:
+    """Central helper: call specified Gemini model with timeout and return raw text using google.generativeai."""
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
         raise ValueError("GEMINI_API_KEY not set.")
     
-    timeout_ms = int(timeout * 1000) if timeout < 1000 else int(timeout)
-    config_args = {
+    genai.configure(api_key=api_key)
+
+    generation_config = {
         "temperature": temperature,
-        "tools": [],
-        "http_options": types.HttpOptions(timeout=timeout_ms)
     }
     if json_mode:
-        config_args["response_mime_type"] = "application/json"
+        generation_config["response_mime_type"] = "application/json"
 
-    response = client.models.generate_content(
-        model=model_name,
-        contents=prompt,
-        config=types.GenerateContentConfig(**config_args)
-    )    
-    raw = response.text.strip()
-    if json_mode:
+    model = genai.GenerativeModel(
+        model_name=model_name,
+        generation_config=generation_config
+    )
+
+    try:
+        response = model.generate_content(
+            prompt,
+            request_options={"timeout": timeout}
+        )
+        raw = response.text.strip() if response and response.text else ""
+    except Exception as e:
+        if json_mode and "response_mime_type" in str(e).lower():
+            model_fallback = genai.GenerativeModel(model_name=model_name, generation_config={"temperature": temperature})
+            response = model_fallback.generate_content(prompt, request_options={"timeout": timeout})
+            raw = response.text.strip() if response and response.text else ""
+        else:
+            raise e
+
+    if json_mode and raw:
         raw = re.sub(r"^```json\s*", "", raw)
         raw = re.sub(r"^```\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
@@ -192,21 +204,21 @@ def _call_groq(prompt: str, model_name: str = "llama-3.3-70b-versatile", timeout
 
 
 def _call_llm_with_fallback(prompt: str, temperature: float = 0.2, json_mode: bool = True) -> str:
-    # ── Tier 1: Gemini 3.5 Flash Lite ──
+    # ── Tier 1: Gemini 1.5 Flash ──
     try:
-        raw = _call_gemini_model(prompt, model_name="gemini-3.5-flash-lite", timeout=25.0, temperature=temperature, json_mode=json_mode)
+        raw = _call_gemini_model(prompt, model_name="gemini-1.5-flash", timeout=25.0, temperature=temperature, json_mode=json_mode)
         if raw and len(raw.strip()) > 0:
             return raw
     except Exception as e:
-        print(f"[LLM Fallback] Tier 1 (Gemini 3.5 Flash Lite) failed ({e}). Escalating to Tier 2 (Gemini 3.6 Flash)...")
+        print(f"[LLM Fallback] Tier 1 (Gemini 1.5 Flash) failed ({e}). Escalating to Tier 2 (Gemini 1.5 Pro)...")
 
-    # ── Tier 2: Gemini 3.6 Flash ──
+    # ── Tier 2: Gemini 1.5 Pro ──
     try:
-        raw = _call_gemini_model(prompt, model_name="gemini-3.6-flash", timeout=35.0, temperature=temperature, json_mode=json_mode)
+        raw = _call_gemini_model(prompt, model_name="gemini-1.5-pro", timeout=35.0, temperature=temperature, json_mode=json_mode)
         if raw and len(raw.strip()) > 0:
             return raw
     except Exception as e:
-        print(f"[LLM Fallback] Tier 2 (Gemini 3.6 Flash) failed ({e}). Escalating to Tier 3 (Groq)...")
+        print(f"[LLM Fallback] Tier 2 (Gemini 1.5 Pro) failed ({e}). Escalating to Tier 3 (Groq)...")
 
     # ── Tier 3: Groq LLaMA 3.3 70B ──
     try:
