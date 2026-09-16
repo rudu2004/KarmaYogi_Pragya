@@ -4,13 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script>
-        // ─── Auth Guard: sessionStorage-based ─────────────────────────────
+        // ─── Auth Guard: sessionStorage + localStorage fallback ─────────
         (function() {
-            var rawUser = sessionStorage.getItem('pragya_user');
+            var rawUser = sessionStorage.getItem('pragya_user') || localStorage.getItem('pragya_user') || localStorage.getItem('currentUser');
             if (!rawUser) { window.location.replace('login.html'); return; }
             try {
-                var user = JSON.parse(rawUser);
-                if (user.role === 'supervisor') { window.location.replace('admin.html'); return; }
+                var user = typeof rawUser === 'string' && (rawUser.startsWith('{') || rawUser.startsWith('[')) ? JSON.parse(rawUser) : { username: rawUser };
+                if (!sessionStorage.getItem('pragya_user')) { sessionStorage.setItem('pragya_user', JSON.stringify(user)); }
+                if (!localStorage.getItem('userName') && (user.full_name || user.username)) {
+                    localStorage.setItem('userName', user.full_name || user.username);
+                }
+                if (!localStorage.getItem('userRole') && user.role) {
+                    localStorage.setItem('userRole', user.role);
+                }
+                if (!localStorage.getItem('currentUser')) {
+                    localStorage.setItem('currentUser', JSON.stringify(user));
+                }
+                if (user.role === 'supervisor' || user.role === 'admin') { window.location.replace('admin.html'); return; }
             } catch(e) { window.location.replace('login.html'); }
         })();
     </script>

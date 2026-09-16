@@ -637,3 +637,12 @@ p, span, li, label {
         padding: 1.5rem;
     }
 }
+
+/* Role-Based Access Control (RBAC) Styles */
+[data-role="admin-only"].rbac-hidden,
+.sidebar-link[data-role="admin-only"].rbac-hidden {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+

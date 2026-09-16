@@ -423,15 +423,20 @@
 
     // ─── SUCCESS HANDLER ──────────────────────────────────────────────────
     function onLoginSuccess(user, token) {
-        // Store session in sessionStorage (dies on browser/tab close)
+        // Store session in BOTH sessionStorage AND localStorage for persistence
         sessionStorage.setItem('pragya_user', JSON.stringify(user));
         sessionStorage.setItem('pragya_token', token);
 
-        // Clear any stale persistent keys from previous runs
-        localStorage.removeItem('pragya_user');
-        localStorage.removeItem('pragya_token');
+        // Persist to localStorage so session survives tab/browser close
+        localStorage.setItem('pragya_user', JSON.stringify(user));
+        localStorage.setItem('pragya_token', token);
 
-        // Also maintain legacy session key for backward compat
+        // Standard session keys for cross-page compatibility
+        localStorage.setItem('userName', user.full_name || user.username);
+        localStorage.setItem('userRole', user.role || 'officer');
+        localStorage.setItem('currentUser', JSON.stringify(user));
+
+        // Legacy session key for backward compat
         localStorage.setItem('user_session', JSON.stringify({
             name: user.full_name,
             language: 'en',
@@ -445,7 +450,7 @@
             if (user.role === 'supervisor') {
                 window.location.href = 'admin.html';
             } else {
-                const hasAssessment = sessionStorage.getItem('assessment_completed') === 'true' || localStorage.getItem('diagnostic_completed') === 'true';
+                const hasAssessment = sessionStorage.getItem('assessment_completed') === 'true' || localStorage.getItem('assessment_completed') === 'true' || localStorage.getItem('diagnostic_completed') === 'true';
                 if (isNewRegistration || !hasAssessment) {
                     window.location.href = 'index.html';
                 } else {
@@ -474,12 +479,13 @@
         setTimeout(() => handleLogin(new Event('submit')), 400);
     }
 
-    // ─── ON LOAD: Always stay on login page ──────────────────────────────
-    // No auto-redirect. User must actively sign in every time.
-    // Clean up any stale persistent auth keys to prevent confusion.
+    // ─── ON LOAD: Stay on login page ──────────────────────────────────────
+    // Do NOT clear localStorage auth keys here — they provide session persistence.
+    // Only sessionStorage is tab-scoped; localStorage survives for returning users.
     document.addEventListener('DOMContentLoaded', () => {
-        localStorage.removeItem('pragya_user');
-        localStorage.removeItem('pragya_token');
+        // Intentionally NOT clearing localStorage.pragya_user to preserve session
+        sessionStorage.removeItem('pragya_user');
+        sessionStorage.removeItem('pragya_token');
     });
     </script>
 </body>

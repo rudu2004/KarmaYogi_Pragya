@@ -887,7 +887,21 @@ Separate the core theoretical sections from the practical frameworks section usi
 
 # ─── 3b. Study MCQs from PDF / Topic ─────────────────────────────────────────
 
-def generate_study_mcqs(course_title: str, pdf_text: str = "", language: str = "en") -> List[Dict[str, Any]]:
+def generate_study_mcqs(course_title: str, pdf_text: Any = "", language: str = "en") -> List[Dict[str, Any]]:
+    # Safe coercion for binary stream objects, bytes, or buffers
+    if hasattr(pdf_text, "read"):
+        try:
+            pdf_text = pdf_text.read()
+        except Exception:
+            pdf_text = ""
+    if isinstance(pdf_text, (bytes, bytearray)):
+        try:
+            pdf_text = pdf_text.decode("utf-8", errors="ignore")
+        except Exception:
+            pdf_text = ""
+    elif not isinstance(pdf_text, str):
+        pdf_text = str(pdf_text or "")
+
     is_hi = language == "hi"
     clean_text = (pdf_text or "")[:6000]
     context_str = f"Based on the following extracted document text:\n\n{clean_text}\n\n" if clean_text else ""
