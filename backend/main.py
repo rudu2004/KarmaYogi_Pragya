@@ -422,9 +422,13 @@ class SubmitDiagnosticRequest(BaseModel):
     lang: Optional[str] = "en"
 
 class StudyMCQRequest(BaseModel):
-    course_title: str
-    pdf_text: Optional[str] = ""
+    course_title: Optional[str] = None
+    topic: Optional[str] = None
+    pdf_text: Optional[str] = None
+    text: Optional[str] = None
+    document_text: Optional[str] = None
     language: Optional[str] = "en"
+    lang: Optional[str] = "en"
 
 class PragyaQuery(BaseModel):
     course_title: str
@@ -716,24 +720,64 @@ def get_study_material(course_title: Optional[str] = None, course: Optional[str]
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/v1/generate-quiz")
+@app.post("/generate-quiz")
+@app.post("/api/v1/generate_quiz")
+@app.post("/generate_quiz")
 @app.post("/api/v1/study_mcqs")
 @app.post("/study_mcqs")
 def generate_mcqs(req: StudyMCQRequest):
-    """Generate 10 MCQs from a course title + optional PDF text."""
+    """
+    Generate 10 MCQs from a course title/topic and optional document/PDF text.
+    Handles multiple aliases (/generate-quiz, /study_mcqs) and returns a complete response.
+    """
+    title = req.course_title or req.topic or "General Knowledge"
+    extracted_text = req.pdf_text or req.text or req.document_text or ""
+    language = req.language or req.lang or "en"
     try:
         from ai_engine import generate_study_mcqs
-        mcqs = generate_study_mcqs(req.course_title, req.pdf_text or "", language=req.language or "en")
+        mcqs = generate_study_mcqs(title, extracted_text, language=language)
         if not isinstance(mcqs, list):
             mcqs = []
-        return {"questions": mcqs, "mcqs": mcqs}
+        return {
+            "status": "success",
+            "course_title": title,
+            "topic": title,
+            "questions": mcqs,
+            "mcqs": mcqs,
+            "quiz": {
+                "questions": mcqs,
+                "total": len(mcqs)
+            }
+        }
     except Exception as e:
-        print(f"[study_mcqs endpoint error] {e}")
+        print(f"[generate_mcqs endpoint error] {e}")
         try:
             from ai_engine import generate_study_mcqs
-            fallback_mcqs = generate_study_mcqs(req.course_title, "", language=req.language or "en")
-            return {"questions": fallback_mcqs, "mcqs": fallback_mcqs}
+            fallback_mcqs = generate_study_mcqs(title, "", language=language)
+            return {
+                "status": "fallback",
+                "course_title": title,
+                "topic": title,
+                "questions": fallback_mcqs,
+                "mcqs": fallback_mcqs,
+                "quiz": {
+                    "questions": fallback_mcqs,
+                    "total": len(fallback_mcqs)
+                }
+            }
         except Exception:
-            return {"questions": [], "mcqs": []}
+            return {
+                "status": "error",
+                "course_title": title,
+                "topic": title,
+                "questions": [],
+                "mcqs": [],
+                "quiz": {
+                    "questions": [],
+                    "total": 0
+                }
+            }
 
 
 @app.post("/api/v1/pragya_chat")

@@ -193,7 +193,7 @@
             const statusEl = document.getElementById('uploadStatus');
             btn.disabled = true;
             btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin me-2"></i> Analyzing...`;
-            statusEl.innerHTML = '<span class="text-info"><i class="fa-solid fa-spinner fa-spin"></i> Parsing document structure...</span>';
+            statusEl.innerHTML = '<span class="text-info"><i class="fa-solid fa-spinner fa-spin"></i> Parsing document structure & extracting text...</span>';
             document.getElementById('resultsSection').classList.add('d-none');
 
             const file = fileInput.files[0];
@@ -201,71 +201,183 @@
             formData.append("file", file);
 
             try {
-                // Step 1: Upload and parse PDF
-                let resp = await fetch(`${BACKEND}/upload_document`, { method: 'POST', body: formData });
-                if (!resp.ok) throw new Error("Upload Failed");
-                const data = await resp.json();
-                const pdfText = data.extracted_text_full || data.extracted_text_preview;
+                // Step 1: Upload and extract text via pypdf / fallback pipeline
+                const uploadResp = await fetch(`${BACKEND}/upload_document`, { method: 'POST', body: formData });
+                if (!uploadResp.ok) throw new Error("Upload Failed");
+                const uploadData = await uploadResp.json();
+                const pdfText = uploadData.extracted_text_full || uploadData.extracted_text_preview || uploadData.extracted_text || "";
 
-                statusEl.innerHTML = '<span class="text-info"><i class="fa-solid fa-spinner fa-spin"></i> Generating notes and quiz...</span>';
+                const courseTitle = file.name.replace(/\.pdf$/i, '');
+                const userLang = (typeof getUserSession === 'function' && getUserSession().language) || localStorage.getItem('selected_language') || 'en';
+                window._lastUploadedPdfText = pdfText;
+                window._lastUploadedCourseTitle = courseTitle;
 
-                // We simulate generating notes and MCQs (or use existing endpoints).
-                // Actually, let's call existing backend endpoint /api/v1/study_mcqs
-                // Wait, generating notes requires a backend endpoint. 
-                // ai_engine.py has generate_study_assistant which can be hit via GET /api/v1/study_material.
-                // But the user said: "Generate and display TWO distinct tabs... Tab 1: AI Executive Summary & Synthesized Notes (generated via a new or existing endpoint hitting LLM). Tab 2: Document Practice Quiz"
+                // Step 2: Generate notes first and display them immediately
+                statusEl.innerHTML = '<span class="text-info"><i class="fa-solid fa-spinner fa-spin"></i> Synthesizing Executive Summary & Notes...</span>';
+                
+                let notesMaterial = null;
+                try {
+                    const notesResp = await fetch(`${BACKEND}/study_material?course=${encodeURIComponent(courseTitle)}&lang=${userLang}`);
+                    if (notesResp.ok) {
+                        notesMaterial = await notesResp.json();
+                    }
+                } catch (notesErr) {
+                    console.warn("Notes generation warning:", notesErr);
+                }
 
-                // Fetch study notes using existing study_material, but providing course title. Let's just use the file name as topic.
-                const courseTitle = file.name.replace('.pdf', '');
+                if (notesMaterial) {
+                    document.getElementById('studyNotesContainer').innerHTML = _formatNotes(notesMaterial);
+                } else {
+                    document.getElementById('studyNotesContainer').innerHTML = `
+                        <div class="p-4 border rounded bg-light">
+                            <h5 class="fw-bold text-navy mb-2"><i class="fa-solid fa-file-lines text-primary me-2"></i>Document Overview: ${courseTitle}</h5>
+                            <p class="text-muted small">Successfully extracted ${pdfText.length} characters from ${file.name}. Review below or switch to the Quiz tab.</p>
+                            <div class="p-3 bg-white border rounded small" style="max-height: 400px; overflow-y: auto; white-space: pre-wrap;">${pdfText.slice(0, 3000)}...</div>
+                        </div>`;
+                }
 
-                const [notesResp, mcqResp] = await Promise.all([
-                    fetch(`${BACKEND}/study_material?course=${encodeURIComponent(courseTitle)}`),
-                    fetch(`${BACKEND}/study_mcqs`, {
+                // Immediately display resultsSection so the user sees notes without waiting for the quiz
+                document.getElementById('resultsSection').classList.remove('d-none');
+
+                // Step 3: Asynchronously generate Quiz using the extracted text payload
+                statusEl.innerHTML = '<span class="text-info"><i class="fa-solid fa-spinner fa-spin"></i> Generating practice quiz from document text...</span>';
+                document.getElementById('mcqContainer').innerHTML = `
+                    <div class="text-center p-5 animate-fade-in" id="quizLoadingState">
+                        <i class="fa-solid fa-brain fa-spin fa-2x text-primary mb-3"></i>
+                        <h5 class="fw-semibold">AI is drafting practice assessment questions...</h5>
+                        <p class="text-muted small">Analyzing extracted text from <strong>${file.name}</strong> and generating 10 calibrated questions.</p>
+                    </div>`;
+
+                let mcqs = [];
+                try {
+                    let quizResp = await fetch(`${BACKEND}/generate-quiz`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ course_title: courseTitle, pdf_text: pdfText })
-                    })
-                ]);
+                        body: JSON.stringify({
+                            course_title: courseTitle,
+                            topic: courseTitle,
+                            pdf_text: pdfText,
+                            text: pdfText,
+                            language: userLang
+                        })
+                    });
 
-                if (!notesResp.ok || !mcqResp.ok) throw new Error("Failed to generate AI materials");
+                    if (!quizResp.ok) {
+                        // Fallback to /study_mcqs
+                        quizResp = await fetch(`${BACKEND}/study_mcqs`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                course_title: courseTitle,
+                                topic: courseTitle,
+                                pdf_text: pdfText,
+                                language: userLang
+                            })
+                        });
+                    }
 
-                const material = await notesResp.json();
-                const rawMcqs = await mcqResp.json();
-                const mcqs = Array.isArray(rawMcqs) ? rawMcqs : (rawMcqs.questions || rawMcqs.mcqs || []);
+                    if (quizResp.ok) {
+                        const rawData = await quizResp.json();
+                        mcqs = Array.isArray(rawData) ? rawData : (rawData.questions || rawData.mcqs || (rawData.quiz && rawData.quiz.questions) || []);
+                    }
+                } catch (quizErr) {
+                    console.warn("Quiz generation error:", quizErr);
+                }
 
-                // Setup Notes
-                const notesHtml = _formatNotes(material);
-                document.getElementById('studyNotesContainer').innerHTML = notesHtml;
-
-                // Setup MCQs (reuse ui_logic.js rendering logic or duplicate here)
-                window._mcqState = { total: mcqs.length, answered: 0, score: 0, mcqs };
-                let mcqHtml = '';
-                mcqs.forEach((mcq, qi) => {
-                    const optionsHtml = mcq.options.map((opt, oi) => `
-                        <div class="mcq-option p-3 border rounded mb-2 shadow-sm bg-white hover-overlay"
-                             id="mcq_${qi}_opt_${oi}"
-                             style="cursor:pointer; transition: all 0.2s;"
-                             onclick="window._answerMCQ(${qi}, ${oi}, '${opt.replace(/'/g, "\\'")}', '${mcq.correct_option.replace(/'/g, "\\'")}', '${mcq.explanation.replace(/'/g, "\\'").replace(/\n/g, ' ')}')">
-                            ${opt}
-                        </div>`).join('');
-                    mcqHtml += `
-                    <div class="mb-5 p-4 border rounded bg-light shadow-sm animate-fade-in" id="mcq_block_${qi}">
-                        <h5 class="fw-semibold mb-3">Q${qi + 1}. ${mcq.question}</h5>
-                        <div id="mcq_opts_${qi}">${optionsHtml}</div>
-                        <div id="mcq_exp_${qi}" class="alert alert-info mt-3 d-none shadow-sm border-0"></div>
-                    </div>`;
-                });
-                document.getElementById('mcqContainer').innerHTML = mcqHtml;
-
-                document.getElementById('resultsSection').classList.remove('d-none');
-                statusEl.innerHTML = `<span class="text-success"><i class="fa-solid fa-check me-1"></i> Document parsed successfully!</span>`;
+                // Render quiz safely
+                _renderQuizList(mcqs, courseTitle, userLang);
+                statusEl.innerHTML = `<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i> Document & quiz ready! Explore tabs below.</span>`;
 
             } catch (err) {
-                console.error(err);
-                statusEl.innerHTML = `<span class="text-danger"><i class="fa-solid fa-triangle-exclamation"></i> Error processing document.</span>`;
+                console.error("Document analysis error:", err);
+                statusEl.innerHTML = `<span class="text-danger"><i class="fa-solid fa-triangle-exclamation"></i> Error processing document. Please try again.</span>`;
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = `Analyze & Generate Material <i class="fa-solid fa-wand-magic-sparkles ms-2"></i>`;
+            }
+        }
+
+        function _renderQuizList(mcqs, courseTitle, userLang) {
+            const container = document.getElementById('mcqContainer');
+            if (!mcqs || !mcqs.length) {
+                container.innerHTML = `
+                    <div class="text-center p-4 border rounded bg-light">
+                        <i class="fa-solid fa-triangle-exclamation fa-2x text-warning mb-2"></i>
+                        <h5 class="fw-semibold">Practice Questions Not Yet Ready</h5>
+                        <p class="text-muted small">Could not generate questions on the first pass from this document text.</p>
+                        <button class="btn btn-primary btn-sm px-3" onclick="retryQuizOnly('${(courseTitle || '').replace(/'/g, "\\'")}', '${userLang || 'en'}')">
+                            <i class="fa-solid fa-rotate-right me-1"></i> Retry Quiz Generation
+                        </button>
+                    </div>`;
+                return;
+            }
+
+            window._mcqState = { total: mcqs.length, answered: 0, score: 0, mcqs };
+            let mcqHtml = '';
+            mcqs.forEach((mcq, qi) => {
+                const qTitle = mcq.question || `Question ${qi + 1}`;
+                const correctOpt = (mcq.correct_option || mcq.answer || '').toString();
+                const explanationText = (mcq.explanation || 'Verified based on document material.').toString();
+                const options = (Array.isArray(mcq.options) && mcq.options.length) ? mcq.options : ['Option A', 'Option B', 'Option C', 'Option D'];
+
+                const optionsHtml = options.map((opt, oi) => {
+                    const optStr = (opt || '').toString();
+                    return `
+                    <div class="mcq-option p-3 border rounded mb-2 shadow-sm bg-white hover-overlay"
+                         id="mcq_${qi}_opt_${oi}"
+                         style="cursor:pointer; transition: all 0.2s;"
+                         onclick="window._answerMCQ(${qi}, ${oi}, '${optStr.replace(/'/g, "\\'")}', '${correctOpt.replace(/'/g, "\\'")}', '${explanationText.replace(/'/g, "\\'").replace(/\n/g, ' ')}')">
+                        ${optStr}
+                    </div>`;
+                }).join('');
+
+                mcqHtml += `
+                <div class="mb-5 p-4 border rounded bg-light shadow-sm animate-fade-in" id="mcq_block_${qi}">
+                    <h5 class="fw-semibold mb-3">Q${qi + 1}. ${qTitle}</h5>
+                    <div id="mcq_opts_${qi}">${optionsHtml}</div>
+                    <div id="mcq_exp_${qi}" class="alert alert-info mt-3 d-none shadow-sm border-0"></div>
+                </div>`;
+            });
+
+            container.innerHTML = mcqHtml;
+        }
+
+        async function retryQuizOnly(courseTitle, userLang) {
+            const container = document.getElementById('mcqContainer');
+            container.innerHTML = `
+                <div class="text-center p-5 animate-fade-in">
+                    <i class="fa-solid fa-spinner fa-spin fa-2x text-primary mb-3"></i>
+                    <h5 class="fw-semibold">Regenerating practice quiz...</h5>
+                </div>`;
+
+            const pdfText = window._lastUploadedPdfText || '';
+            try {
+                let resp = await fetch(`${BACKEND}/generate-quiz`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        course_title: courseTitle,
+                        topic: courseTitle,
+                        pdf_text: pdfText,
+                        language: userLang
+                    })
+                });
+                if (!resp.ok) {
+                    resp = await fetch(`${BACKEND}/study_mcqs`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ course_title: courseTitle, pdf_text: pdfText, language: userLang })
+                    });
+                }
+                const raw = await resp.json();
+                const mcqs = Array.isArray(raw) ? raw : (raw.questions || raw.mcqs || (raw.quiz && raw.quiz.questions) || []);
+                _renderQuizList(mcqs, courseTitle, userLang);
+            } catch (e) {
+                container.innerHTML = `
+                    <div class="alert alert-danger text-center">
+                        <p>Retry failed. Please check your backend connection.</p>
+                        <button class="btn btn-outline-danger btn-sm" onclick="retryQuizOnly('${courseTitle.replace(/'/g, "\\'")}', '${userLang}')">Retry Again</button>
+                    </div>`;
             }
         }
     </script>
