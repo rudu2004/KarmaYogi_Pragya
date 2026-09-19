@@ -140,9 +140,63 @@
         </div>
     </div>
 
+    <!-- Bootstrap 5 JS Bundle (required for data-bs-toggle="tab" to work) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="./js/auth.js"></script>
     <script src="./js/apple_scroll.js"></script>
     <script src="./js/ui_logic.js"></script>
+
+    <!-- Manual tab-switching fallback: guarantees tabs work even if Bootstrap
+         Tab plugin doesn't auto-discover dynamically-revealed pane elements -->
+    <script>
+    (function() {
+        function wireTabFallback() {
+            var notesTab = document.getElementById('notes-tab');
+            var quizTab  = document.getElementById('quiz-tab');
+            var notesPane = document.getElementById('notes-pane');
+            var quizPane  = document.getElementById('quiz-pane');
+            if (!notesTab || !quizTab || !notesPane || !quizPane) return;
+
+            function activateTab(activeBtn, activePane, inactiveBtn, inactivePane) {
+                // Try Bootstrap API first
+                try {
+                    var bsTab = bootstrap.Tab.getOrCreateInstance(activeBtn);
+                    if (bsTab && typeof bsTab.show === 'function') {
+                        bsTab.show();
+                        return;
+                    }
+                } catch(e) { /* Bootstrap JS not loaded or failed — fall through */ }
+
+                // Manual DOM toggle fallback
+                inactiveBtn.classList.remove('active');
+                inactiveBtn.setAttribute('aria-selected', 'false');
+                inactivePane.classList.remove('show', 'active');
+
+                activeBtn.classList.add('active');
+                activeBtn.setAttribute('aria-selected', 'true');
+                activePane.classList.add('show', 'active');
+            }
+
+            notesTab.addEventListener('click', function(e) {
+                e.preventDefault();
+                activateTab(notesTab, notesPane, quizTab, quizPane);
+            });
+
+            quizTab.addEventListener('click', function(e) {
+                e.preventDefault();
+                activateTab(quizTab, quizPane, notesTab, notesPane);
+            });
+        }
+
+        // Run as soon as DOM is available AND again after window.load
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', wireTabFallback);
+        } else {
+            wireTabFallback();
+        }
+        window.addEventListener('load', wireTabFallback);
+    })();
+    </script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const user = getUserSession();
