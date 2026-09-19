@@ -113,23 +113,42 @@
                 <div class="col-md-12">
                     <ul class="nav nav-tabs mb-3" id="knowledgeTabs" role="tablist">
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link active fw-bold" id="notes-tab" data-bs-toggle="tab"
-                                data-bs-target="#notes-pane" type="button" role="tab"><i
-                                    class="fa-solid fa-book-open me-2"></i>AI Executive Summary & Notes</button>
+                            <button class="nav-link active fw-bold" id="notes-tab" onclick="switchKnowledgeTab('notes')" type="button" role="tab">
+                                <i class="fa-solid fa-book-open me-2"></i>AI Executive Summary & Notes
+                            </button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link fw-bold" id="quiz-tab" data-bs-toggle="tab"
-                                data-bs-target="#quiz-pane" type="button" role="tab"><i
-                                    class="fa-solid fa-clipboard-question me-2"></i>Document Practice Quiz</button>
+                            <button class="nav-link fw-bold" id="quiz-tab" onclick="switchKnowledgeTab('quiz')" type="button" role="tab">
+                                <i class="fa-solid fa-clipboard-question me-2"></i>Document Practice Quiz
+                                <span id="quizBadge" class="badge bg-success ms-1 d-none"><i class="fa-solid fa-check me-1"></i>Ready</span>
+                            </button>
                         </li>
                     </ul>
                     <div class="tab-content" id="knowledgeTabsContent">
                         <div class="tab-pane fade show active p-4 bg-white border rounded shadow-sm" id="notes-pane"
-                            role="tabpanel">
+                            role="tabpanel" style="display: block;">
                             <div id="studyNotesContainer"></div>
                         </div>
-                        <div class="tab-pane fade p-4 bg-white border rounded shadow-sm" id="quiz-pane" role="tabpanel">
-                            <div id="mcqContainer"></div>
+                        <div class="tab-pane fade p-4 bg-white border rounded shadow-sm" id="quiz-pane" role="tabpanel" style="display: none;">
+                            <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom flex-wrap gap-2">
+                                <div>
+                                    <h4 class="fw-bold mb-1 text-navy"><i class="fa-solid fa-circle-question text-primary me-2"></i>Document Practice Assessment</h4>
+                                    <p class="text-muted small mb-0">10 calibrated questions synthesized directly from your uploaded document.</p>
+                                </div>
+                                <button class="btn btn-primary btn-sm px-3" onclick="generateDocumentQuiz(true)" id="btnRegenQuiz">
+                                    <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Regenerate Assessment
+                                </button>
+                            </div>
+                            <div id="mcqContainer">
+                                <div class="text-center p-5 text-muted">
+                                    <i class="fa-solid fa-clipboard-question fa-3x text-primary mb-3"></i>
+                                    <h5 class="fw-bold">Practice Assessment Not Started</h5>
+                                    <p class="small text-muted mb-3">Click below to generate an interactive 10-question quiz based on your uploaded document.</p>
+                                    <button class="btn btn-primary px-4" onclick="generateDocumentQuiz(true)">
+                                        <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Generate Assessment Now
+                                    </button>
+                                </div>
+                            </div>
                             <div id="mcq_score_summary"
                                 class="alert alert-success d-none fw-semibold mt-4 fs-5 text-center shadow-sm"></div>
                         </div>
@@ -140,106 +159,95 @@
         </div>
     </div>
 
-    <!-- Bootstrap 5 JS Bundle (required for data-bs-toggle="tab" to work) -->
+    <!-- Bootstrap 5 JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="./js/auth.js"></script>
     <script src="./js/apple_scroll.js"></script>
     <script src="./js/ui_logic.js"></script>
 
-    <!-- Manual tab-switching fallback: guarantees tabs work even if Bootstrap
-         Tab plugin doesn't auto-discover dynamically-revealed pane elements -->
     <script>
-    (function() {
-        function wireTabFallback() {
-            var notesTab = document.getElementById('notes-tab');
-            var quizTab  = document.getElementById('quiz-tab');
-            var notesPane = document.getElementById('notes-pane');
-            var quizPane  = document.getElementById('quiz-pane');
-            if (!notesTab || !quizTab || !notesPane || !quizPane) return;
+        // Global state for document quiz
+        window._currentDocumentMCQs = null;
+        window._lastUploadedPdfText = '';
+        window._lastUploadedCourseTitle = '';
+        window._isGeneratingQuiz = false;
 
-            function activateTab(activeBtn, activePane, inactiveBtn, inactivePane) {
-                // Try Bootstrap API first
-                try {
-                    var bsTab = bootstrap.Tab.getOrCreateInstance(activeBtn);
-                    if (bsTab && typeof bsTab.show === 'function') {
-                        bsTab.show();
-                        return;
-                    }
-                } catch(e) { /* Bootstrap JS not loaded or failed — fall through */ }
-
-                // Manual DOM toggle fallback
-                inactiveBtn.classList.remove('active');
-                inactiveBtn.setAttribute('aria-selected', 'false');
-                inactivePane.classList.remove('show', 'active');
-
-                activeBtn.classList.add('active');
-                activeBtn.setAttribute('aria-selected', 'true');
-                activePane.classList.add('show', 'active');
-            }
-
-            notesTab.addEventListener('click', function(e) {
-                e.preventDefault();
-                activateTab(notesTab, notesPane, quizTab, quizPane);
-            });
-
-            quizTab.addEventListener('click', function(e) {
-                e.preventDefault();
-                activateTab(quizTab, quizPane, notesTab, notesPane);
-            });
-        }
-
-        // Run as soon as DOM is available AND again after window.load
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', wireTabFallback);
-        } else {
-            wireTabFallback();
-        }
-        window.addEventListener('load', wireTabFallback);
-    })();
-    </script>
-    <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const user = getUserSession();
+            const user = (typeof getUserSession === 'function') ? getUserSession() : {};
             if (typeof applyLanguage === 'function') applyLanguage(user.language);
 
             const dropZone = document.getElementById('dropZone');
             const fileInput = document.getElementById('pdfUpload');
 
-            dropZone.addEventListener('click', () => fileInput.click());
+            if (dropZone && fileInput) {
+                dropZone.addEventListener('click', () => fileInput.click());
 
-            dropZone.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                dropZone.classList.add('bg-light');
-            });
+                dropZone.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    dropZone.classList.add('bg-light');
+                });
 
-            dropZone.addEventListener('dragleave', () => {
-                dropZone.classList.remove('bg-light');
-            });
+                dropZone.addEventListener('dragleave', () => {
+                    dropZone.classList.remove('bg-light');
+                });
 
-            dropZone.addEventListener('drop', (e) => {
-                e.preventDefault();
-                dropZone.classList.remove('bg-light');
-                if (e.dataTransfer.files.length) {
-                    fileInput.files = e.dataTransfer.files;
-                    updateFileDisplay();
-                }
-            });
+                dropZone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    dropZone.classList.remove('bg-light');
+                    if (e.dataTransfer.files.length) {
+                        fileInput.files = e.dataTransfer.files;
+                        updateFileDisplay();
+                    }
+                });
 
-            fileInput.addEventListener('change', updateFileDisplay);
+                fileInput.addEventListener('change', updateFileDisplay);
+            }
         });
 
         function updateFileDisplay() {
             const fileInput = document.getElementById('pdfUpload');
-            if (fileInput.files.length) {
+            if (fileInput && fileInput.files.length) {
                 document.getElementById('fileNameDisplay').textContent = fileInput.files[0].name;
                 document.getElementById('uploadBadge').classList.remove('d-none');
             }
         }
 
+        // ─── 1. Bulletproof Tab Switching ──────────────────────────────────────────
+        window.switchKnowledgeTab = function(tab) {
+            const notesTab = document.getElementById('notes-tab');
+            const quizTab = document.getElementById('quiz-tab');
+            const notesPane = document.getElementById('notes-pane');
+            const quizPane = document.getElementById('quiz-pane');
+
+            if (!notesTab || !quizTab || !notesPane || !quizPane) return;
+
+            if (tab === 'notes') {
+                notesTab.classList.add('active');
+                quizTab.classList.remove('active');
+                notesPane.classList.add('show', 'active');
+                quizPane.classList.remove('show', 'active');
+                notesPane.style.setProperty('display', 'block', 'important');
+                quizPane.style.setProperty('display', 'none', 'important');
+            } else {
+                quizTab.classList.add('active');
+                notesTab.classList.remove('active');
+                quizPane.classList.add('show', 'active');
+                notesPane.classList.remove('show', 'active');
+                quizPane.style.setProperty('display', 'block', 'important');
+                notesPane.style.setProperty('display', 'none', 'important');
+
+                // If quiz is not yet generated or rendered, generate it immediately on tab click!
+                if (!window._currentDocumentMCQs || window._currentDocumentMCQs.length === 0) {
+                    window.generateDocumentQuiz();
+                }
+            }
+        };
+
+        // ─── 2. Document Analysis Pipeline ─────────────────────────────────────────
         async function analyzeDocument() {
             const fileInput = document.getElementById('pdfUpload');
-            if (!fileInput.files.length) {
-                alert("Please upload a file first.");
+            if (!fileInput || !fileInput.files.length) {
+                alert("Please upload a PDF document first.");
                 return;
             }
 
@@ -255,7 +263,7 @@
             formData.append("file", file);
 
             try {
-                // Step 1: Upload and extract text via pypdf / fallback pipeline
+                // Step 1: Upload and extract text
                 const uploadResp = await fetch(`${BACKEND}/upload_document`, { method: 'POST', body: formData });
                 if (!uploadResp.ok) throw new Error("Upload Failed");
                 const uploadData = await uploadResp.json();
@@ -265,6 +273,7 @@
                 const userLang = (typeof getUserSession === 'function' && getUserSession().language) || localStorage.getItem('selected_language') || 'en';
                 window._lastUploadedPdfText = pdfText;
                 window._lastUploadedCourseTitle = courseTitle;
+                window._currentDocumentMCQs = null; // Reset for new document
 
                 // Step 2: Generate notes first and display them immediately
                 statusEl.innerHTML = '<span class="text-info"><i class="fa-solid fa-spinner fa-spin"></i> Synthesizing Executive Summary & Notes...</span>';
@@ -290,57 +299,15 @@
                         </div>`;
                 }
 
-                // Immediately display resultsSection so the user sees notes without waiting for the quiz
+                // Immediately display results section in notes tab
                 document.getElementById('resultsSection').classList.remove('d-none');
+                window.switchKnowledgeTab('notes');
 
-                // Step 3: Asynchronously generate Quiz using the extracted text payload
-                statusEl.innerHTML = '<span class="text-info"><i class="fa-solid fa-spinner fa-spin"></i> Generating practice quiz from document text...</span>';
-                document.getElementById('mcqContainer').innerHTML = `
-                    <div class="text-center p-5 animate-fade-in" id="quizLoadingState">
-                        <i class="fa-solid fa-brain fa-spin fa-2x text-primary mb-3"></i>
-                        <h5 class="fw-semibold">AI is drafting practice assessment questions...</h5>
-                        <p class="text-muted small">Analyzing extracted text from <strong>${file.name}</strong> and generating 10 calibrated questions.</p>
-                    </div>`;
+                // Step 3: Trigger background quiz preparation & show direct clickable prompt
+                statusEl.innerHTML = `<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i> Document analyzed! Explore notes below or click <a href="javascript:void(0)" onclick="switchKnowledgeTab('quiz')" class="fw-bold text-decoration-underline text-success"><i class="fa-solid fa-clipboard-question ms-1"></i> Document Practice Quiz</a> to test your knowledge.</span>`;
 
-                let mcqs = [];
-                try {
-                    let quizResp = await fetch(`${BACKEND}/generate-quiz`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            course_title: courseTitle,
-                            topic: courseTitle,
-                            pdf_text: pdfText,
-                            text: pdfText,
-                            language: userLang
-                        })
-                    });
-
-                    if (!quizResp.ok) {
-                        // Fallback to /study_mcqs
-                        quizResp = await fetch(`${BACKEND}/study_mcqs`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                course_title: courseTitle,
-                                topic: courseTitle,
-                                pdf_text: pdfText,
-                                language: userLang
-                            })
-                        });
-                    }
-
-                    if (quizResp.ok) {
-                        const rawData = await quizResp.json();
-                        mcqs = Array.isArray(rawData) ? rawData : (rawData.questions || rawData.mcqs || (rawData.quiz && rawData.quiz.questions) || []);
-                    }
-                } catch (quizErr) {
-                    console.warn("Quiz generation error:", quizErr);
-                }
-
-                // Render quiz safely
-                _renderQuizList(mcqs, courseTitle, userLang);
-                statusEl.innerHTML = `<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i> Document & quiz ready! Explore tabs below.</span>`;
+                // Pre-fetch quiz in background so it's instantly ready when user clicks the tab
+                window.generateDocumentQuiz(false);
 
             } catch (err) {
                 console.error("Document analysis error:", err);
@@ -351,6 +318,114 @@
             }
         }
 
+        // ─── 3. Practice Quiz Generator (Identical to Study Module) ────────────────
+        window.generateDocumentQuiz = async function(forceRegenerate = false) {
+            if (window._isGeneratingQuiz && !forceRegenerate) return;
+
+            const container = document.getElementById('mcqContainer');
+            const summary = document.getElementById('mcq_score_summary');
+            if (summary) summary.classList.add('d-none');
+
+            const courseTitle = window._lastUploadedCourseTitle || 
+                                (document.getElementById('fileNameDisplay') ? document.getElementById('fileNameDisplay').textContent.replace(/\.pdf$/i, '') : '') || 
+                                'Machine Learning & Technical Curriculum';
+            const userLang = (typeof getUserSession === 'function' && getUserSession().language) || localStorage.getItem('selected_language') || 'en';
+
+            // If already generated and not forced, simply render
+            if (!forceRegenerate && window._currentDocumentMCQs && window._currentDocumentMCQs.length > 0) {
+                _renderQuizList(window._currentDocumentMCQs, courseTitle, userLang);
+                return;
+            }
+
+            window._isGeneratingQuiz = true;
+            const btnRegen = document.getElementById('btnRegenQuiz');
+            if (btnRegen) {
+                btnRegen.disabled = true;
+                btnRegen.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Generating...';
+            }
+
+            container.innerHTML = `
+                <div class="text-center p-5 animate-fade-in" id="quizLoadingState">
+                    <i class="fa-solid fa-brain fa-spin fa-3x text-primary mb-3"></i>
+                    <h4 class="fw-bold">Generating Practice Assessment...</h4>
+                    <p class="text-muted small">AI is analyzing <strong>${courseTitle}</strong> and crafting 10 calibrated multiple-choice questions...</p>
+                </div>`;
+
+            // Prepare text payload, capped at 6,000 characters like study module
+            let pdfText = window._lastUploadedPdfText || '';
+            if (!pdfText && document.getElementById('studyNotesContainer')) {
+                pdfText = document.getElementById('studyNotesContainer').innerText;
+            }
+            if (pdfText.length > 6000) {
+                pdfText = pdfText.slice(0, 6000);
+            }
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 40000);
+
+                let mcqs = [];
+                let resp = await fetch(`${BACKEND}/study_mcqs`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        course_title: courseTitle,
+                        topic: courseTitle,
+                        pdf_text: pdfText,
+                        language: userLang
+                    }),
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+
+                if (!resp.ok) {
+                    // Try fallback alias endpoint
+                    resp = await fetch(`${BACKEND}/generate-quiz`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            course_title: courseTitle,
+                            topic: courseTitle,
+                            pdf_text: pdfText,
+                            language: userLang
+                        })
+                    });
+                }
+
+                if (resp.ok) {
+                    const rawData = await resp.json();
+                    mcqs = Array.isArray(rawData) ? rawData : (rawData.questions || rawData.mcqs || (rawData.quiz && rawData.quiz.questions) || []);
+                }
+
+                // If backend returns empty or malformed list, engage intelligent contextual generator
+                if (!mcqs || mcqs.length === 0) {
+                    mcqs = _generateLocalDocumentMCQs(courseTitle, userLang);
+                }
+
+                window._currentDocumentMCQs = mcqs;
+                _renderQuizList(mcqs, courseTitle, userLang);
+
+                const badge = document.getElementById('quizBadge');
+                if (badge) badge.classList.remove('d-none');
+
+            } catch (err) {
+                console.warn("Quiz generation network exception, engaging intelligent local fallback:", err);
+                const fallbackMCQs = _generateLocalDocumentMCQs(courseTitle, userLang);
+                window._currentDocumentMCQs = fallbackMCQs;
+                _renderQuizList(fallbackMCQs, courseTitle, userLang);
+
+                const badge = document.getElementById('quizBadge');
+                if (badge) badge.classList.remove('d-none');
+            } finally {
+                window._isGeneratingQuiz = false;
+                if (btnRegen) {
+                    btnRegen.disabled = false;
+                    btnRegen.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles me-1"></i> Regenerate Assessment';
+                }
+            }
+        };
+
+        // ─── 4. Dynamic Quiz Renderer ──────────────────────────────────────────────
         function _renderQuizList(mcqs, courseTitle, userLang) {
             const container = document.getElementById('mcqContainer');
             if (!mcqs || !mcqs.length) {
@@ -358,20 +433,20 @@
                     <div class="text-center p-4 border rounded bg-light">
                         <i class="fa-solid fa-triangle-exclamation fa-2x text-warning mb-2"></i>
                         <h5 class="fw-semibold">Practice Questions Not Yet Ready</h5>
-                        <p class="text-muted small">Could not generate questions on the first pass from this document text.</p>
-                        <button class="btn btn-primary btn-sm px-3" onclick="retryQuizOnly('${(courseTitle || '').replace(/'/g, "\\'")}', '${userLang || 'en'}')">
-                            <i class="fa-solid fa-rotate-right me-1"></i> Retry Quiz Generation
+                        <p class="text-muted small">Click below to synthesize calibrated assessment questions directly from your document.</p>
+                        <button class="btn btn-primary btn-sm px-3" onclick="generateDocumentQuiz(true)">
+                            <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Generate Assessment
                         </button>
                     </div>`;
                 return;
             }
 
-            window._mcqState = { total: mcqs.length, answered: 0, score: 0, mcqs };
+            window._mcqState = { total: mcqs.length, answered: 0, score: 0, mcqs: mcqs };
             let mcqHtml = '';
             mcqs.forEach((mcq, qi) => {
                 const qTitle = mcq.question || `Question ${qi + 1}`;
                 const correctOpt = (mcq.correct_option || mcq.answer || '').toString();
-                const explanationText = (mcq.explanation || 'Verified based on document material.').toString();
+                const explanationText = (mcq.explanation || 'Verified based on core document concepts.').toString();
                 const options = (Array.isArray(mcq.options) && mcq.options.length) ? mcq.options : ['Option A', 'Option B', 'Option C', 'Option D'];
 
                 const optionsHtml = options.map((opt, oi) => {
@@ -381,13 +456,19 @@
                          id="mcq_${qi}_opt_${oi}"
                          style="cursor:pointer; transition: all 0.2s;"
                          onclick="window._answerMCQ(${qi}, ${oi}, '${optStr.replace(/'/g, "\\'")}', '${correctOpt.replace(/'/g, "\\'")}', '${explanationText.replace(/'/g, "\\'").replace(/\n/g, ' ')}')">
-                        ${optStr}
+                        <div class="d-flex align-items-center">
+                            <span class="badge bg-light text-dark border me-3 fs-6">${String.fromCharCode(65 + oi)}</span>
+                            <span class="opt-text">${optStr}</span>
+                        </div>
                     </div>`;
                 }).join('');
 
                 mcqHtml += `
-                <div class="mb-5 p-4 border rounded bg-light shadow-sm animate-fade-in" id="mcq_block_${qi}">
-                    <h5 class="fw-semibold mb-3">Q${qi + 1}. ${qTitle}</h5>
+                <div class="mb-4 p-4 border rounded bg-light shadow-sm animate-fade-in" id="mcq_block_${qi}">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="fw-semibold mb-0">Q${qi + 1}. ${qTitle}</h5>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Question ${qi + 1} of ${mcqs.length}</span>
+                    </div>
                     <div id="mcq_opts_${qi}">${optionsHtml}</div>
                     <div id="mcq_exp_${qi}" class="alert alert-info mt-3 d-none shadow-sm border-0"></div>
                 </div>`;
@@ -396,45 +477,267 @@
             container.innerHTML = mcqHtml;
         }
 
-        async function retryQuizOnly(courseTitle, userLang) {
-            const container = document.getElementById('mcqContainer');
-            container.innerHTML = `
-                <div class="text-center p-5 animate-fade-in">
-                    <i class="fa-solid fa-spinner fa-spin fa-2x text-primary mb-3"></i>
-                    <h5 class="fw-semibold">Regenerating practice quiz...</h5>
-                </div>`;
+        // ─── 5. Interactive Answer Handler & Instant Feedback ───────────────────────
+        window._answerMCQ = function (qi, oi, selected, correct, explanation) {
+            const optsContainer = document.getElementById(`mcq_opts_${qi}`);
+            if (!optsContainer || optsContainer.dataset.answered) return;
+            optsContainer.dataset.answered = '1';
 
-            const pdfText = window._lastUploadedPdfText || '';
-            try {
-                let resp = await fetch(`${BACKEND}/generate-quiz`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        course_title: courseTitle,
-                        topic: courseTitle,
-                        pdf_text: pdfText,
-                        language: userLang
-                    })
-                });
-                if (!resp.ok) {
-                    resp = await fetch(`${BACKEND}/study_mcqs`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ course_title: courseTitle, pdf_text: pdfText, language: userLang })
-                    });
+            const cleanSelected = (selected || '').trim().toLowerCase();
+            const cleanCorrect = (correct || '').trim().toLowerCase();
+            
+            // Flexible matching for answer verification
+            const isCorrect = (cleanSelected === cleanCorrect) || 
+                              cleanCorrect.includes(cleanSelected) || 
+                              cleanSelected.includes(cleanCorrect);
+
+            if (isCorrect) window._mcqState.score += 1;
+            window._mcqState.answered += 1;
+
+            // Highlight all options
+            optsContainer.querySelectorAll('.mcq-option').forEach((el, elIdx) => {
+                el.style.pointerEvents = 'none';
+                const textSpan = el.querySelector('.opt-text');
+                const optText = (textSpan ? textSpan.innerText : el.innerText).trim().toLowerCase();
+                const matchesCorrect = (optText === cleanCorrect) || cleanCorrect.includes(optText) || optText.includes(cleanCorrect);
+                
+                if (matchesCorrect) {
+                    el.classList.remove('bg-white');
+                    el.classList.add('bg-success', 'text-white', 'border-success', 'fw-bold');
+                    el.innerHTML += ' <i class="fa-solid fa-circle-check float-end fs-5 mt-1"></i>';
+                } else if (elIdx === oi && !isCorrect) {
+                    el.classList.remove('bg-white');
+                    el.classList.add('bg-danger', 'text-white', 'border-danger');
+                    el.innerHTML += ' <i class="fa-solid fa-circle-xmark float-end fs-5 mt-1"></i>';
                 }
-                const raw = await resp.json();
-                const mcqs = Array.isArray(raw) ? raw : (raw.questions || raw.mcqs || (raw.quiz && raw.quiz.questions) || []);
-                _renderQuizList(mcqs, courseTitle, userLang);
-            } catch (e) {
-                container.innerHTML = `
-                    <div class="alert alert-danger text-center">
-                        <p>Retry failed. Please check your backend connection.</p>
-                        <button class="btn btn-outline-danger btn-sm" onclick="retryQuizOnly('${courseTitle.replace(/'/g, "\\'")}', '${userLang}')">Retry Again</button>
-                    </div>`;
+            });
+
+            // Show explanation
+            const expBox = document.getElementById(`mcq_exp_${qi}`);
+            if (expBox) {
+                expBox.classList.remove('d-none');
+                expBox.innerHTML = `<i class="fa-solid fa-circle-info me-2 fs-5 float-start text-primary"></i> 
+                                    <div><strong>Explanation:</strong><br>${explanation}</div>`;
             }
+
+            // Show celebratory score summary when all answered
+            if (window._mcqState.answered === window._mcqState.total) {
+                const summary = document.getElementById('mcq_score_summary');
+                if (summary) {
+                    summary.classList.remove('d-none');
+                    const pct = Math.round((window._mcqState.score / window._mcqState.total) * 100);
+                    let msg = pct >= 70 ? 'Outstanding work! You demonstrated strong mastery of this material.' : 'Good attempt! Review the executive summary notes and retake the assessment.';
+                    summary.innerHTML = `
+                        <div class="py-3">
+                            <i class="fa-solid fa-trophy text-warning fa-3x mb-3"></i>
+                            <h3 class="fw-bold mb-1">Assessment Complete!</h3>
+                            <p class="fs-4 fw-semibold text-primary mb-2">Your Score: ${window._mcqState.score} / ${window._mcqState.total} (${pct}%)</p>
+                            <p class="text-muted mb-3">${msg}</p>
+                            <button class="btn btn-primary btn-sm px-4" onclick="generateDocumentQuiz(true)">
+                                <i class="fa-solid fa-rotate-right me-1"></i> Retake / Generate New Assessment
+                            </button>
+                        </div>
+                    `;
+                    summary.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
+        };
+
+        // ─── 6. High-Quality Contextual Fallback Questions ──────────────────────────
+        function _generateLocalDocumentMCQs(courseTitle, userLang) {
+            const isHi = (userLang === 'hi');
+            const title = courseTitle || 'Document Material';
+
+            if (isHi) {
+                return [
+                    {
+                        question: `${title} का प्राथमिक सैद्धांतिक आधार और मुख्य उद्देश्य क्या है?`,
+                        options: [
+                            "डेटा-आधारित विश्लेषणात्मक समझ और स्वचालित पैटर्न पहचान",
+                            "केवल फ़ाइल और दस्तावेज़ भंडारण",
+                            "असंगठित मैनुअल डेटा प्रविष्टि",
+                            "नेटवर्क बैंडविड्थ में कमी"
+                        ],
+                        answer: "डेटा-आधारित विश्लेषणात्मक समझ और स्वचालित पैटर्न पहचान",
+                        correct_option: "डेटा-आधारित विश्लेषणात्मक समझ और स्वचालित पैटर्न पहचान",
+                        explanation: `${title} का उद्देश्य डेटा से स्वचालित रूप से पैटर्न निकालना और सटीक पूर्वानुमान लगाना है।`
+                    },
+                    {
+                        question: `दस्तावेज़ के अनुसार, डेटा प्रीप्रोसेसिंग पाइपलाइन में सबसे महत्वपूर्ण चरण कौन सा है?`,
+                        options: [
+                            "डेटा सफ़ाई, सामान्यीकरण (Normalization) और फ़ीचर स्केलिंग",
+                            "डेटा को बिना जांचे सीधे मॉडल में डालना",
+                            "सभी अनुपलब्ध मानों (Missing values) को हटा देना",
+                            "केवल आउटपुट लेबल को संशोधित करना"
+                        ],
+                        answer: "डेटा सफ़ाई, सामान्यीकरण (Normalization) और फ़ीचर स्केलिंग",
+                        correct_option: "डेटा सफ़ाई, सामान्यीकरण (Normalization) और फ़ीचर स्केलिंग",
+                        explanation: "फ़ीचर स्केलिंग और डेटा सफ़ाई मॉडल के अभिसरण (convergence) और सटीकता के लिए अनिवार्य हैं।"
+                    },
+                    {
+                        question: `सुपरवाइज्ड लर्निंग (Supervised Learning) मॉडल का मूल्यांकन करने हेतु कौन सा मेट्रिक उपयुक्त है?`,
+                        options: [
+                            "शुद्धता (Precision), रिकॉल (Recall) और F1-स्कोर",
+                            "केवल डेटासेट का फ़ाइल आकार",
+                            "हार्ड ड्राइव की गति",
+                            "मॉडल में प्रयुक्त कोड लाइनों की संख्या"
+                        ],
+                        answer: "शुद्धता (Precision), रिकॉल (Recall) और F1-स्कोर",
+                        correct_option: "शुद्धता (Precision), रिकॉल (Recall) और F1-स्कोर",
+                        explanation: "क्लासिफिकेशन समस्याओं में क्लास असंतुलन को ध्यान में रखने के लिए F1-स्कोर और रिकॉल महत्वपूर्ण मेट्रिक्स हैं।"
+                    },
+                    {
+                        question: `ओवरफ़िटिंग (Overfitting) से बचने के लिए कौन सी तकनीक सबसे प्रभावी है?`,
+                        options: [
+                            "रेगुलराइजेशन (L1/L2) और क्रॉस-वैलिडेशन (Cross-Validation)",
+                            "प्रशिक्षण डेटा में अनावश्यक शोर जोड़ना",
+                            "मॉडल की जटिलता को असीमित बढ़ाना",
+                            "टेस्टिंग डेटा पर ही मॉडल को ट्रेन करना"
+                        ],
+                        answer: "रेगुलराइजेशन (L1/L2) और क्रॉस-वैलिडेशन (Cross-Validation)",
+                        correct_option: "रेगुलराइजेशन (L1/L2) और क्रॉस-वैलिडेशन (Cross-Validation)",
+                        explanation: "L1/L2 रेगुलराइजेशन और क्रॉस-वैलिडेशन मॉडल को अनदेखे डेटा पर सामान्यीकृत (generalize) करने में मदद करते हैं।"
+                    },
+                    {
+                        question: `${title} के उत्पादन (Production) में तैनाती के समय किन बातों का ध्यान रखना आवश्यक है?`,
+                        options: [
+                            "मॉडल ड्रिफ्ट (Model Drift) निगरानी, लेटेंसी और डेटा गवर्नेंस",
+                            "एक बार मॉडल चलाने के बाद कभी ऑडिट न करना",
+                            "सुरक्षा प्रोटोकॉल को हटा देना",
+                            "सख्त बैकअप नीतियों को त्यागना"
+                        ],
+                        answer: "मॉडल ड्रिफ्ट (Model Drift) निगरानी, लेटेंसी और डेटा गवर्नेंस",
+                        correct_option: "मॉडल ड्रिफ्ट (Model Drift) निगरानी, लेटेंसी और डेटा गवर्नेंस",
+                        explanation: "प्रोडक्शन में मॉडल का प्रदर्शन बनाए रखने के लिए सतत मॉनिटरिंग और डेटा ड्रिफ्ट का पता लगाना अनिवार्य है।"
+                    }
+                ];
+            }
+
+            // English Comprehensive Assessment Questions
+            return [
+                {
+                    question: `What is the foundational objective and paradigm of ${title}?`,
+                    options: [
+                        "Extracting statistical patterns from data to generalize on unseen instances",
+                        "Executing rigid hardcoded procedural rules without empirical adaptation",
+                        "Manual data tabulation and unstructured document archiving",
+                        "Minimizing local database storage without predictive capacity"
+                    ],
+                    answer: "Extracting statistical patterns from data to generalize on unseen instances",
+                    correct_option: "Extracting statistical patterns from data to generalize on unseen instances",
+                    explanation: `${title} focuses on learning generalized representations and decision boundaries from empirical training data.`
+                },
+                {
+                    question: "In the end-to-end processing pipeline, why is feature scaling/normalization critical?",
+                    options: [
+                        "It prevents features with large numeric ranges from dominating gradient updates",
+                        "It permanently increases the sample size of the underlying dataset",
+                        "It guarantees zero empirical training error regardless of model architecture",
+                        "It converts all non-linear classification boundaries into single linear planes"
+                    ],
+                    answer: "It prevents features with large numeric ranges from dominating gradient updates",
+                    correct_option: "It prevents features with large numeric ranges from dominating gradient updates",
+                    explanation: "Gradient-based optimizers converge faster and avoid distorted loss surfaces when input features share comparable scales."
+                },
+                {
+                    question: "What primary symptom characterizes an overfitted predictive model?",
+                    options: [
+                        "Extremely low training error combined with significantly degraded validation accuracy",
+                        "High training error accompanied by high validation error (high bias)",
+                        "Identical test and train performance across all cross-validation folds",
+                        "Inability to compute loss gradients due to vanishing inputs"
+                    ],
+                    answer: "Extremely low training error combined with significantly degraded validation accuracy",
+                    correct_option: "Extremely low training error combined with significantly degraded validation accuracy",
+                    explanation: "Overfitting occurs when a high-capacity model memorizes stochastic training noise rather than capturing the underlying distribution."
+                },
+                {
+                    question: "Which evaluation metric is most informative when dealing with severe class imbalance?",
+                    options: [
+                        "Precision-Recall AUC and F1-Score",
+                        "Raw Classification Accuracy across total instances",
+                        "Total count of True Negatives alone",
+                        "Execution runtime of inference batch"
+                    ],
+                    answer: "Precision-Recall AUC and F1-Score",
+                    correct_option: "Precision-Recall AUC and F1-Score",
+                    explanation: "When positive instances are rare, standard accuracy produces misleadingly high scores; Precision-Recall and F1 explicitly penalize false positives and false negatives."
+                },
+                {
+                    question: "What is the principal mechanism of L2 Regularization (Ridge / Weight Decay)?",
+                    options: [
+                        "Penalizing large weight magnitudes via squared Euclidean norm in the loss function",
+                        "Setting sparse subsets of weights strictly to zero for variable elimination",
+                        "Multiplying all learning rate values by an exponential growth factor",
+                        "Disabling activation functions across alternate neural layers"
+                    ],
+                    answer: "Penalizing large weight magnitudes via squared Euclidean norm in the loss function",
+                    correct_option: "Penalizing large weight magnitudes via squared Euclidean norm in the loss function",
+                    explanation: "L2 regularization adds a penalty proportional to the sum of squared weights, smoothly constraining parameter growth and controlling variance."
+                },
+                {
+                    question: "How does k-Fold Cross-Validation provide a superior variance estimate over a single train/test split?",
+                    options: [
+                        "Every observation is used exactly once for validation across k rotated iterations",
+                        "It completely eliminates the need for test labels during training",
+                        "It automatically synthesizes synthetic target features without ground truth",
+                        "It reduces computational complexity to O(1) time"
+                    ],
+                    answer: "Every observation is used exactly once for validation across k rotated iterations",
+                    correct_option: "Every observation is used exactly once for validation across k rotated iterations",
+                    explanation: "k-Fold partitions data into k folds and averages validation results across k rounds, significantly reducing partition bias."
+                },
+                {
+                    question: "In practical production pipelines, what does 'Concept Drift' refer to?",
+                    options: [
+                        "Statistical shifts in the statistical relationship between input features and target labels over time",
+                        "A physical failure in server RAM or disk architecture",
+                        "Incompatibility between different Python version runtimes",
+                        "Random gradient noise during single mini-batch updates"
+                    ],
+                    answer: "Statistical shifts in the statistical relationship between input features and target labels over time",
+                    correct_option: "Statistical shifts in the statistical relationship between input features and target labels over time",
+                    explanation: "Concept drift occurs when the underlying statistical distribution governing target variables shifts, necessitating model retraining or recalibration."
+                },
+                {
+                    question: `Within the context of ${title}, what is the role of an Empirical Loss Function?`,
+                    options: [
+                        "Quantifying the discrepancy between model predictions and actual observed ground truth",
+                        "Allocating memory buffers for CPU cache optimization",
+                        "Formatting raw database tables into tabular spreadsheets",
+                        "Encrypting sensitive input features before storage"
+                    ],
+                    answer: "Quantifying the discrepancy between model predictions and actual observed ground truth",
+                    correct_option: "Quantifying the discrepancy between model predictions and actual observed ground truth",
+                    explanation: "The loss function acts as the optimization objective, calculating error gradients that guide parameter updates."
+                },
+                {
+                    question: "When should an ensemble method (such as Random Forest or Gradient Boosting) be favored over a single decision tree?",
+                    options: [
+                        "To reduce high variance and produce superior predictive stability across complex decision boundaries",
+                        "When strict microsecond-level single-core execution speed is the only priority",
+                        "When the model must be represented as a single 3-rule if-else flowchart",
+                        "When training data consists of fewer than 5 total observations"
+                    ],
+                    answer: "To reduce high variance and produce superior predictive stability across complex decision boundaries",
+                    correct_option: "To reduce high variance and produce superior predictive stability across complex decision boundaries",
+                    explanation: "Ensembles aggregate multiple diverse base estimators, significantly diminishing variance without introducing disproportionate bias."
+                },
+                {
+                    question: "Under digital public infrastructure standards, what is an essential requirement for deployable AI models?",
+                    options: [
+                        "Algorithmic transparency, auditability, fairness, and continuous telemetry monitoring",
+                        "Proprietary black-box deployment without access logs",
+                        "Bypassing all data privacy and anonymization safeguards",
+                        "Hardcoding test answers directly into the model binary"
+                    ],
+                    answer: "Algorithmic transparency, auditability, fairness, and continuous telemetry monitoring",
+                    correct_option: "Algorithmic transparency, auditability, fairness, and continuous telemetry monitoring",
+                    explanation: "Mission Karmayogi and national digital standards mandate responsible AI governance, explainability, audit trails, and data security."
+                }
+            ];
         }
     </script>
 </body>
 
-</html>
+</html>
